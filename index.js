@@ -1,7 +1,11 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const fs = require('fs');
-const qrcode = require('qrcode-terminal');
 const puppeteer = require('puppeteer-core');
+const express = require("express");
+const qr = require("qr-image");
+
+const app = express();
+const port = process.env.PORT || 3000; // Usa el puerto de Railway si está disponible
 
 const client = new Client({
     authStrategy: new LocalAuth(),
@@ -20,10 +24,33 @@ const client = new Client({
     }
 });
 
-client.on('qr', qr => {
-    console.log("📌 Escanea este código QR con WhatsApp:");
-    qrcode.generate(qr, { small: true });
+let qrCodeData = null;
+
+client.on("qr", (qrCode) => {
+    console.log("📌 Se generó un nuevo QR. Escanéalo para conectar.");
+
+    // Guardar el QR en una variable
+    qrCodeData = qrCode;
 });
+
+// Servir el QR como imagen en una URL
+app.get("/qr", (req, res) => {
+    if (qrCodeData) {
+        const qrImage = qr.image(qrCodeData, { type: "png" });
+        res.setHeader("Content-Type", "image/png");
+        qrImage.pipe(res);
+    } else {
+        res.send("QR aún no generado, espera unos segundos...");
+    }
+});
+
+// Iniciar el servidor en Railway
+app.listen(port, "0.0.0.0", () => {
+    console.log(`📡 Servidor QR corriendo en Railway en el puerto ${port}`);
+});
+
+// Inicializar WhatsApp después de iniciar el servidor
+client.initialize();
 
 client.on('ready', () => {
     console.log("✅ Bot conectado y listo para capturar mensajes.");
@@ -67,5 +94,3 @@ function guardarMensaje(remitente, tipo, mensaje) {
     fs.writeFileSync(filePath, JSON.stringify(historial, null, 2));
     console.log(`📌 Mensaje guardado (${tipo}) para ${remitente}.`);
 }
-
-client.initialize();
