@@ -7,6 +7,12 @@ const puppeteer = require('puppeteer-core');
 const app = express();
 const port = process.env.PORT || 3000; // Railway asigna un puerto dinámico
 
+// Crear carpeta "public" si no existe
+const qrFolder = "public";
+if (!fs.existsSync(qrFolder)) {
+    fs.mkdirSync(qrFolder);
+}
+
 // Configurar el cliente de WhatsApp
 const client = new Client({
     authStrategy: new LocalAuth(),
@@ -25,28 +31,26 @@ const client = new Client({
     }
 });
 
-let qrCodeData = null;
-
 // Evento cuando se genera el QR
 client.on("qr", (qrCode) => {
     console.log("📌 Se generó un nuevo QR. Escanéalo para conectar.");
 
-    // Guardar el QR en una variable
-    qrCodeData = qrCode;
-
-    // Generar QR como imagen y guardarlo
+    // Generar y guardar el QR como imagen en la carpeta "public"
     const qrImage = qr.image(qrCode, { type: "png" });
-    qrImage.pipe(fs.createWriteStream("qr_code.png"));
+    qrImage.pipe(fs.createWriteStream(`${qrFolder}/qr_code.png`));
 });
 
 // Servidor Express para Railway
+app.use(express.static(qrFolder)); // Servir archivos estáticos desde "public"
+
+// Ruta principal para comprobar que el servidor está activo
 app.get("/", (req, res) => {
     res.send("🚀 Servidor activo en Railway.");
 });
 
 // Ruta para ver el QR
 app.get("/qr", (req, res) => {
-    const qrPath = "qr_code.png";
+    const qrPath = `${qrFolder}/qr_code.png`;
 
     if (fs.existsSync(qrPath)) {
         res.sendFile(qrPath, { root: __dirname });
