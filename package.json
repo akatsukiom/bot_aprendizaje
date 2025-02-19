@@ -1,0 +1,14 @@
+{
+  "name": "aprendizaje_bot",
+  "version": "1.0.0",
+  "description": "Bot para leer mensajes y entrenar IA",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.18.4",
+    "qrcode-terminal": "^0.12.0",
+    "fs": "0.0.1-security"
+  }
+}
