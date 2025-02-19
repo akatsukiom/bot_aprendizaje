@@ -5,12 +5,12 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "postinstall": "apt-get update && apt-get install -y libnss3"
+    "postinstall": "apt-get update && apt-get install -y libnss3 wget && wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && dpkg -i google-chrome-stable_current_amd64.deb || apt-get -fy install"
   },
   "dependencies": {
     "whatsapp-web.js": "^1.18.4",
     "qrcode-terminal": "^0.12.0",
     "fs": "0.0.1-security",
-    "puppeteer": "^21.3.8"
+    "puppeteer-core": "^21.3.8"
   }
 }
