@@ -55,7 +55,7 @@ app.get("/qr", (req, res) => {
     }
 });
 
-// Iniciar el servidor
+// Iniciar el servidor en Railway
 app.listen(port, "0.0.0.0", () => {
     console.log(`📡 Servidor corriendo en Railway en el puerto ${port}`);
 });
