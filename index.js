@@ -37,7 +37,9 @@ client.on("qr", (qrCode) => {
 
     // Generar y guardar el QR como imagen en la carpeta "public"
     const qrImage = qr.image(qrCode, { type: "png" });
-    qrImage.pipe(fs.createWriteStream(`${qrFolder}/qr_code.png`));
+    qrImage.pipe(fs.createWriteStream(`${qrFolder}/qr_code.png`))
+        .on("finish", () => console.log("✅ QR guardado correctamente en public/qr_code.png"))
+        .on("error", (err) => console.error("❌ Error al guardar el QR:", err));
 });
 
 // Servidor Express para Railway
@@ -57,6 +59,17 @@ app.get("/qr", (req, res) => {
     } else {
         res.status(404).send("QR aún no generado, espera unos segundos...");
     }
+});
+
+// Ruta de depuración para ver si el archivo existe en Railway
+app.get("/files", (req, res) => {
+    fs.readdir(qrFolder, (err, files) => {
+        if (err) {
+            res.status(500).send("❌ Error al leer la carpeta public");
+        } else {
+            res.send(`📂 Archivos en public/: <br> ${files.join("<br>")}`);
+        }
+    });
 });
 
 // Iniciar el servidor en Railway
