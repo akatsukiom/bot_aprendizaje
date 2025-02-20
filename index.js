@@ -2,16 +2,11 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require("express");
 const fs = require("fs");
 const qr = require("qr-image");
-const path = require("path");
 
 const app = express();
 const port = process.env.PORT || 3000; // Railway asigna un puerto dinámico
 
-// Crear carpeta "public" si no existe
-const qrFolder = path.join(__dirname, "public"); 
-if (!fs.existsSync(qrFolder)) {
-    fs.mkdirSync(qrFolder);
-}
+let qrBase64 = null; // Variable para almacenar el QR en formato Base64
 
 // Configurar el cliente de WhatsApp
 const client = new Client({
@@ -35,42 +30,31 @@ const client = new Client({
 client.on("qr", (qrCode) => {
     console.log("📌 Se generó un nuevo QR. Escanéalo para conectar.");
 
-    // Generar y guardar el QR como imagen en la carpeta "public"
-    const qrImage = qr.image(qrCode, { type: "png" });
-    const qrPath = path.join(qrFolder, "qr_code.png");
-    qrImage.pipe(fs.createWriteStream(qrPath))
-        .on("finish", () => console.log("✅ QR guardado correctamente en public/qr_code.png"))
-        .on("error", (err) => console.error("❌ Error al guardar el QR:", err));
+    // Convertir el QR a Base64
+    const qrImage = qr.imageSync(qrCode, { type: "png" });
+    qrBase64 = `data:image/png;base64,${qrImage.toString("base64")}`;
 });
 
-// Servir archivos estáticos desde la carpeta "public"
-app.use("/public", express.static(qrFolder));
-
-// Ruta principal para comprobar que el servidor está activo
+// Servidor Express para Railway
 app.get("/", (req, res) => {
     res.send("🚀 Servidor activo en Railway.");
 });
 
-// Ruta para ver el QR
+// Ruta para mostrar el QR en la web
 app.get("/qr", (req, res) => {
-    const qrPath = path.join(qrFolder, "qr_code.png");
-
-    if (fs.existsSync(qrPath)) {
-        res.sendFile(qrPath);
+    if (qrBase64) {
+        res.send(`
+            <html>
+            <head><title>QR de WhatsApp</title></head>
+            <body style="text-align: center;">
+                <h2>Escanea este código QR para conectar WhatsApp</h2>
+                <img src="${qrBase64}" alt="QR Code">
+            </body>
+            </html>
+        `);
     } else {
         res.status(404).send("QR aún no generado, espera unos segundos...");
     }
-});
-
-// Ruta de depuración para ver si el archivo existe en Railway
-app.get("/files", (req, res) => {
-    fs.readdir(qrFolder, (err, files) => {
-        if (err) {
-            res.status(500).send("❌ Error al leer la carpeta public");
-        } else {
-            res.send(`📂 Archivos en public/: <br> ${files.join("<br>")}`);
-        }
-    });
 });
 
 // Iniciar el servidor en Railway
