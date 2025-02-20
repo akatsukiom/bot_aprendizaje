@@ -2,13 +2,13 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require("express");
 const fs = require("fs");
 const qr = require("qr-image");
-const puppeteer = require('puppeteer-core');
+const path = require("path");
 
 const app = express();
 const port = process.env.PORT || 3000; // Railway asigna un puerto dinámico
 
 // Crear carpeta "public" si no existe
-const qrFolder = __dirname + "/public"; 
+const qrFolder = path.join(__dirname, "public"); 
 if (!fs.existsSync(qrFolder)) {
     fs.mkdirSync(qrFolder);
 }
@@ -37,13 +37,14 @@ client.on("qr", (qrCode) => {
 
     // Generar y guardar el QR como imagen en la carpeta "public"
     const qrImage = qr.image(qrCode, { type: "png" });
-    qrImage.pipe(fs.createWriteStream(`${qrFolder}/qr_code.png`))
+    const qrPath = path.join(qrFolder, "qr_code.png");
+    qrImage.pipe(fs.createWriteStream(qrPath))
         .on("finish", () => console.log("✅ QR guardado correctamente en public/qr_code.png"))
         .on("error", (err) => console.error("❌ Error al guardar el QR:", err));
 });
 
-// Servidor Express para Railway
-app.use(express.static(qrFolder)); // Servir archivos estáticos desde "public"
+// Servir archivos estáticos desde la carpeta "public"
+app.use("/public", express.static(qrFolder));
 
 // Ruta principal para comprobar que el servidor está activo
 app.get("/", (req, res) => {
@@ -52,7 +53,7 @@ app.get("/", (req, res) => {
 
 // Ruta para ver el QR
 app.get("/qr", (req, res) => {
-    const qrPath = `${qrFolder}/qr_code.png`;
+    const qrPath = path.join(qrFolder, "qr_code.png");
 
     if (fs.existsSync(qrPath)) {
         res.sendFile(qrPath);
@@ -83,42 +84,3 @@ client.initialize();
 client.on('ready', () => {
     console.log("✅ Bot conectado y listo para capturar mensajes.");
 });
-
-// 📌 Capturar mensajes entrantes (del cliente)
-client.on('message', async msg => {
-    guardarMensaje(msg.from, "cliente", msg.body);
-});
-
-// 📌 Capturar mensajes enviados (del operador)
-client.on('message_create', async msg => {
-    if (msg.fromMe) { // Solo guarda los mensajes que envía el operador
-        guardarMensaje(msg.to, "operador", msg.body);
-    }
-});
-
-// 📌 Función para guardar los mensajes organizados por cliente
-function guardarMensaje(remitente, tipo, mensaje) {
-    const filePath = "historial_clientes.json";
-    let historial = {};
-
-    // Si el archivo ya existe, cargarlo
-    if (fs.existsSync(filePath)) {
-        historial = JSON.parse(fs.readFileSync(filePath));
-    }
-
-    // Si el número del cliente no existe, crearlo
-    if (!historial[remitente]) {
-        historial[remitente] = { mensajes: [] };
-    }
-
-    // Agregar el mensaje al historial del cliente
-    historial[remitente].mensajes.push({
-        tipo,  // "cliente" o "operador"
-        texto: mensaje,
-        timestamp: new Date().toISOString()
-    });
-
-    // Guardar el historial actualizado
-    fs.writeFileSync(filePath, JSON.stringify(historial, null, 2));
-    console.log(`📌 Mensaje guardado (${tipo}) para ${remitente}.`);
-}
