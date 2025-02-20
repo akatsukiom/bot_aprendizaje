@@ -1,18 +1,14 @@
 {
-  "name": "aprendizaje_bot",
+  "name": "whatsapp_bot",
   "version": "1.0.0",
-  "description": "Bot para leer mensajes y entrenar IA",
+  "description": "Enhanced WhatsApp Bot with Venom",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "postinstall": "apt-get update && apt-get install -y libnss3 wget && wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && dpkg -i google-chrome-stable_current_amd64.deb || apt-get -fy install"
+    "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.21.2",
-    "fs": "0.0.1-security",
-    "puppeteer-core": "^21.3.8",
-    "qr-image": "^3.2.0",
-    "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "^1.18.4"
+    "express": "^4.18.2",
+    "venom-bot": "^5.0.21",
+    "qr-image": "^3.2.0"
   }
 }
