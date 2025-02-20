@@ -8,7 +8,7 @@ const app = express();
 const port = process.env.PORT || 3000; // Railway asigna un puerto dinámico
 
 // Crear carpeta "public" si no existe
-const qrFolder = "public";
+const qrFolder = __dirname + "/public"; 
 if (!fs.existsSync(qrFolder)) {
     fs.mkdirSync(qrFolder);
 }
@@ -55,7 +55,7 @@ app.get("/qr", (req, res) => {
     const qrPath = `${qrFolder}/qr_code.png`;
 
     if (fs.existsSync(qrPath)) {
-        res.sendFile(qrPath, { root: __dirname });
+        res.sendFile(qrPath);
     } else {
         res.status(404).send("QR aún no generado, espera unos segundos...");
     }
