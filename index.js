@@ -1,7 +1,7 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require("express");
 const qrcode = require("qrcode-terminal");
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer'); // Usar Puppeteer estándar en lugar de "puppeteer-core"
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -12,7 +12,7 @@ console.log("🚀 Iniciando el bot de WhatsApp...");
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        executablePath: "/usr/bin/chromium-browser", // Ruta corregida en Render
+        executablePath: puppeteer.executablePath(), // Usa la versión integrada de Puppeteer
         args: [
             "--no-sandbox",
             "--disable-setuid-sandbox",
