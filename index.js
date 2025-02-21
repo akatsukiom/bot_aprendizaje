@@ -1,16 +1,18 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require("express");
 const qrcode = require("qrcode-terminal");
+const puppeteer = require('puppeteer');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 console.log("🚀 Iniciando el bot de WhatsApp...");
 
-// Configurar el cliente de WhatsApp con LocalAuth para guardar la sesión
+// Configurar el cliente de WhatsApp con Puppeteer
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
+        executablePath: "/usr/bin/chromium-browser", // Ruta corregida en Render
         args: [
             "--no-sandbox",
             "--disable-setuid-sandbox",
@@ -20,8 +22,7 @@ const client = new Client({
             "--no-zygote",
             "--disable-gpu"
         ],
-        headless: true,
-        executablePath: "/usr/bin/google-chrome-stable" // Ruta exacta en Render
+        headless: true
     }
 });
 
@@ -29,11 +30,6 @@ const client = new Client({
 client.on("qr", (qrCode) => {
     console.log("📌 Se generó un nuevo QR. Escanéalo desde la consola.");
     qrcode.generate(qrCode, { small: true }); // Mostrar QR real en la consola
-});
-
-// Evento cuando el cliente está listo
-client.on("ready", () => {
-    console.log("✅ Bot conectado y listo para capturar mensajes.");
 });
 
 // Servidor Express para Render (Para evitar que cierre el proceso)
