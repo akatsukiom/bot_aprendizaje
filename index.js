@@ -1,6 +1,6 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require("express");
-const qrcode = require("qrcode-terminal"); // Para mostrar QR en consola
+const qrcode = require("qrcode-terminal");
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -28,16 +28,21 @@ const client = new Client({
 // Evento cuando se genera el QR de WhatsApp
 client.on("qr", (qrCode) => {
     console.log("📌 Se generó un nuevo QR. Escanéalo desde la consola.");
-    qrcode.generate(qrCode, { small: true }); // Mostrar QR real de WhatsApp en la consola
+    qrcode.generate(qrCode, { small: true }); // Mostrar QR real en la consola
 });
 
-// Servidor Express para ver que está activo
+// Evento cuando el cliente está listo
+client.on("ready", () => {
+    console.log("✅ Bot conectado y listo para capturar mensajes.");
+});
+
+// Servidor Express para Render (Para evitar que cierre el proceso)
 app.get("/", (req, res) => {
-    res.send("🚀 Servidor activo en Render.");
+    res.send("🚀 Bot WhatsApp en ejecución en Render.");
 });
 
 app.listen(port, "0.0.0.0", () => {
-    console.log(`📡 Servidor corriendo en el puerto ${port}`);
+    console.log(`📡 Servidor activo en el puerto ${port}. Render no cerrará el proceso.`);
 });
 
 // Iniciar WhatsApp después de iniciar el servidor
