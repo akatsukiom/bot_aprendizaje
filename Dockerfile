@@ -1,4 +1,3 @@
-// Dockerfile corregido para tu bot
 FROM node:18-slim
 
 # Instalar git y dependencias necesarias
@@ -21,4 +20,3 @@ EXPOSE 8000
 
 # Comando de inicio
 CMD ["npm", "start"]
-"]
