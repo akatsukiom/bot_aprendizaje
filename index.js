@@ -25,22 +25,24 @@ function initBot() {
     const qrcode = require('qrcode-terminal');
     
     // Crear cliente de WhatsApp
-    const client = new Client({
-      authStrategy: new LocalAuth(),
-      puppeteer: {
+ // En la parte donde configuramos el cliente WhatsApp
+const client = new Client({
+    authStrategy: new LocalAuth(),
+    puppeteer: {
         headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process',
-          '--disable-gpu'
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu'
         ]
-      }
-    });
+    }
+});
     
     // Evento de código QR
     client.on('qr', (qr) => {
