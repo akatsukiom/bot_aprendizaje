@@ -1,7 +1,26 @@
 FROM node:18-slim
 
-# Instalar git y dependencias necesarias
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+# Instalar git y librerías necesarias para Puppeteer
+RUN apt-get update && apt-get install -y \
+    git \
+    libnss3 \
+    libatk1.0-0 \
+    libpangocairo-1.0-0 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxi6 \
+    libxrandr2 \
+    libgbm-dev \
+    libasound2 \
+    libpango-1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libatspi2.0-0 \
+    libgobject-2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Crear directorio de trabajo
 WORKDIR /usr/src/app
