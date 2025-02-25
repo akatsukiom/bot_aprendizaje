@@ -20,9 +20,10 @@ RUN apt-get update && apt-get install -y \
     libcups2 \
     libatspi2.0-0 \
     libglib2.0-dev \  # Cambio aquí (en vez de libgobject-2.0-dev)
-    libdrm-dev \
-    libxshmfence1 \
+    libdrm-dev \       # Se mantiene en la lista de instalación
+    libxshmfence1 \    
     && rm -rf /var/lib/apt/lists/*
+
 
 # Crear directorio de trabajo
 WORKDIR /usr/src/app
