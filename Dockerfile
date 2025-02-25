@@ -1,6 +1,6 @@
 FROM node:18-slim
 
-# Instalar git y librerías necesarias para Puppeteer
+# Instalar git y librerías necesarias para Puppeteer en Debian/Ubuntu
 RUN apt-get update && apt-get install -y \
     git \
     libnss3 \
@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y \
     libatk-bridge2.0-0 \
     libcups2 \
     libatspi2.0-0 \
-    libgobject-2.0-0 \
+    libgobject-2.0-dev \  # Corregido
     libdrm2 \
     libxshmfence1 \
     && rm -rf /var/lib/apt/lists/*
@@ -36,7 +36,7 @@ RUN npm install --no-optional --legacy-peer-deps
 # Copiar el resto del código
 COPY . .
 
-# Exponer el puerto de Express si se usa
+# Exponer el puerto de Express
 EXPOSE 8000
 
 # Comando de inicio
