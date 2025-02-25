@@ -1,4 +1,3 @@
-# Dockerfile corregido para Railway
 FROM node:18-slim
 
 # Instalar git y librerías necesarias para Puppeteer en Debian/Ubuntu
@@ -20,7 +19,7 @@ RUN apt-get update && apt-get install -y \
     libatk-bridge2.0-0 \
     libcups2 \
     libatspi2.0-0 \
-    libgobject-2.0-dev \
+    libglib2.0-dev \  # Cambio aquí (en vez de libgobject-2.0-dev)
     libdrm-dev \
     libxshmfence1 \
     && rm -rf /var/lib/apt/lists/*
