@@ -135,13 +135,13 @@ app.get('/', (req, res) => {
                     const chatBox = document.getElementById("chatBox");
                     chatBox.innerHTML = "";
                     messages.forEach(msg => {
-                       chatBox.innerHTML += `
+                       chatBox.innerHTML += \`
     <div class="message">
-        <strong>${msg.remitente}</strong>: ${msg.mensaje.replace(/</g, "&lt;").replace(/>/g, "&gt;")}
-        <div class="timestamp">${new Date(msg.fecha).toLocaleString()}</div>
+        <strong>\${msg.remitente}</strong>: \${msg.mensaje.replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+        <div class="timestamp">\${new Date(msg.fecha).toLocaleString()}</div>
     </div>
-`;
-
+\`;
+                    });
                     chatBox.scrollTop = chatBox.scrollHeight;
                 }
                 setInterval(fetchMessages, 3000);
