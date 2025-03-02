@@ -1,4 +1,4 @@
-// index.js - Bot que almacena mensajes en SQLite e implementa aprendizaje
+// index.js - Bot de WhatsApp en modo aprendizaje (solo captura, sin respuestas)
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const sqlite3 = require('sqlite3').verbose();
@@ -28,8 +28,8 @@ const db = new sqlite3.Database(dbPath, (err) => {
     }
 });
 
-// Inicializar el cliente de WhatsApp
-const client = new Client({
+// Inicializar el cliente de WhatsApp como variable global
+global.client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
@@ -37,8 +37,27 @@ const client = new Client({
     }
 });
 
+// Referencia local para facilitar el uso
+const client = global.client;
+
+// Variable para almacenar el QR actual
+let currentQR = null;
+
 // Inicializar el módulo de aprendizaje
 const learningHandler = new LearningHandler();
+
+// Evento QR
+client.on('qr', (qr) => {
+    console.log('📱 Código QR generado:');
+    qrcode.generate(qr, { small: true });
+    currentQR = qr; // Guardar el QR actual
+});
+
+// Evento cuando el cliente está listo
+client.on('ready', () => {
+    console.log('🤖 Bot de WhatsApp listo y en modo aprendizaje');
+    currentQR = null; // Limpiar QR cuando estamos conectados
+});
 
 // Evento para almacenar mensajes en la base de datos y procesar aprendizaje
 client.on('message', async (msg) => {
@@ -62,25 +81,9 @@ client.on('message', async (msg) => {
     await learningHandler.processMessage(msg);
 });
 
-// Evento cuando el cliente está listo
-client.on('ready', () => {
-    console.log('🤖 Bot de WhatsApp listo y en modo aprendizaje');
-});
-
-// Evento QR
-client.on('qr', (qr) => {
-    console.log('📱 Escanea este código QR:');
-    qrcode.generate(qr, { small: true });
-});
-
-// Mantener el bot activo en Railway
-setInterval(() => {
-    console.log("🔄 Bot sigue corriendo en modo aprendizaje...");
-}, 10000);
-
 // Ruta para obtener los mensajes en tiempo real
 app.get('/messages', (req, res) => {
-    db.all("SELECT * FROM mensajes ORDER BY fecha DESC", [], (err, rows) => {
+    db.all("SELECT * FROM mensajes ORDER BY fecha DESC LIMIT 100", [], (err, rows) => {
         if (err) {
             return res.status(500).json({ error: err.message });
         }
@@ -110,6 +113,15 @@ app.get('/learning/patterns', (req, res) => {
             res.json(rows);
         }
     );
+});
+
+// Ruta para obtener el estado actual del QR
+app.get('/qr-status', (req, res) => {
+    const state = client.getState() || 'DISCONNECTED';
+    res.json({
+        state: state,
+        qr: currentQR
+    });
 });
 
 // Ruta para exportar la base de datos a JSON
@@ -154,19 +166,249 @@ app.get('/export/csv', (req, res) => {
     });
 });
 
-// Ruta para cerrar sesión y generar un nuevo QR
-app.get('/logout', (req, res) => {
-    const sessionPath = './.wwebjs_auth';
-    if (fs.existsSync(sessionPath)) {
-        fs.rmSync(sessionPath, { recursive: true });
-        console.log("🗑 Sesión eliminada. Se generará un nuevo QR.");
+// Ruta mejorada para cerrar sesión y mostrar QR
+app.get('/logout', async (req, res) => {
+    try {
+        // Cerrar sesión de WhatsApp correctamente
+        await client.logout();
+        console.log("✅ Sesión de WhatsApp cerrada correctamente");
+        
+        // Eliminar carpeta de autenticación
+        const sessionPath = './.wwebjs_auth';
+        if (fs.existsSync(sessionPath)) {
+            fs.rmSync(sessionPath, { recursive: true, force: true });
+            console.log("🗑 Carpeta de sesión eliminada");
+        }
+        
+        // Enviar respuesta con JavaScript para recargar después de 5 segundos
+        res.send(`
+            <h1>✅ Sesión cerrada correctamente</h1>
+            <p>La página se recargará automáticamente en 5 segundos para mostrar el código QR.</p>
+            <p>O puedes <a href="/">hacer clic aquí</a> para volver al inicio.</p>
+            <script>
+                setTimeout(function() {
+                    window.location.href = '/';
+                }, 5000);
+            </script>
+        `);
+        
+        // Reiniciar WhatsApp después de enviar la respuesta
+        setTimeout(async () => {
+            try {
+                // Destruir la instancia actual del cliente
+                await client.destroy();
+                console.log("🔄 Cliente destruido, reiniciando...");
+                
+                // Crear una nueva instancia del cliente
+                global.client = new Client({
+                    authStrategy: new LocalAuth(),
+                    puppeteer: {
+                        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+                        headless: true
+                    }
+                });
+                
+                // Volver a registrar los eventos
+                client.on('qr', (qr) => {
+                    console.log('📱 Nuevo código QR generado');
+                    qrcode.generate(qr, { small: true });
+                    currentQR = qr;
+                });
+                
+                client.on('ready', () => {
+                    console.log('🤖 Bot de WhatsApp reiniciado y listo');
+                    currentQR = null;
+                });
+                
+                client.on('message', async (msg) => {
+                    const remitente = msg.from;
+                    const mensaje = msg.body;
+                    const fecha = new Date().toISOString();
+                
+                    db.run(`INSERT INTO mensajes (remitente, mensaje, fecha) VALUES (?, ?, ?)`,
+                        [remitente, mensaje, fecha],
+                        (err) => {
+                            if (err) {
+                                console.error("❌ Error al guardar mensaje:", err.message);
+                            } else {
+                                console.log(`💾 Mensaje guardado de ${remitente}: "${mensaje}"`);
+                            }
+                        }
+                    );
+                
+                    await learningHandler.processMessage(msg);
+                });
+                
+                // Inicializar el nuevo cliente
+                await client.initialize();
+            } catch (error) {
+                console.error("❌ Error al reiniciar el cliente:", error);
+            }
+        }, 2000);
+        
+    } catch (error) {
+        console.error("❌ Error en el cierre de sesión:", error);
+        res.status(500).send("Error al cerrar sesión. Intente nuevamente.");
     }
-    res.send("<h1>✅ Sesión cerrada</h1><p>Recarga la página para escanear un nuevo QR.</p><a href='/'>🔄 Volver</a>");
-    process.exit(1);
+});
+
+// Ruta para forzar la regeneración del QR
+app.get('/generate-qr', async (req, res) => {
+    try {
+        // Estado actual del cliente
+        const connectionState = client.getState();
+        
+        if (connectionState === 'CONNECTED') {
+            res.send(`
+                <h1>✅ Bot ya está conectado</h1>
+                <p>El bot ya está conectado a WhatsApp y funcionando correctamente.</p>
+                <p><a href="/">Volver al panel</a></p>
+            `);
+            return;
+        }
+        
+        // Mostrar página con QR dinámico
+        res.send(`
+            <html>
+            <head>
+                <title>Código QR de WhatsApp</title>
+                <style>
+                    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+                    #qrcode { margin: 20px auto; }
+                    .status { margin: 20px 0; padding: 10px; background: #f0f0f0; border-radius: 5px; }
+                </style>
+                <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+            </head>
+            <body>
+                <h1>🔄 Generando código QR para WhatsApp</h1>
+                <p>El código QR aparecerá aquí en unos segundos. Escanéalo con WhatsApp.</p>
+                
+                <div id="qrcode"></div>
+                <div class="status" id="status">Esperando código QR...</div>
+                
+                <p><a href="/">Volver al panel</a></p>
+                
+                <script>
+                    let qrCodeElement = null;
+                    
+                    // Función para crear el QR
+                    function createQR(qrData) {
+                        if (qrCodeElement) {
+                            qrCodeElement.clear();
+                            qrCodeElement.makeCode(qrData);
+                        } else {
+                            document.getElementById('qrcode').innerHTML = '';
+                            qrCodeElement = new QRCode(document.getElementById("qrcode"), {
+                                text: qrData,
+                                width: 256,
+                                height: 256,
+                                colorDark: "#000000",
+                                colorLight: "#ffffff",
+                                correctLevel: QRCode.CorrectLevel.H
+                            });
+                        }
+                        
+                        document.getElementById('status').innerText = 'Código QR generado. Escanéalo ahora.';
+                    }
+                    
+                    // Función para verificar el estado
+                    async function checkStatus() {
+                        try {
+                            const response = await fetch('/qr-status');
+                            const data = await response.json();
+                            
+                            if (data.state === 'CONNECTED') {
+                                document.getElementById('status').innerText = '✅ Conectado exitosamente!';
+                                document.getElementById('qrcode').innerHTML = '<h2>✅ Conectado</h2>';
+                                clearInterval(intervalId);
+                                
+                                // Redirigir al panel principal después de 3 segundos
+                                setTimeout(() => {
+                                    window.location.href = '/';
+                                }, 3000);
+                                
+                            } else if (data.qr) {
+                                createQR(data.qr);
+                            }
+                        } catch (error) {
+                            document.getElementById('status').innerText = 'Error al obtener estado: ' + error;
+                        }
+                    }
+                    
+                    // Verificar cada 3 segundos
+                    const intervalId = setInterval(checkStatus, 3000);
+                    
+                    // Verificar inmediatamente al cargar
+                    checkStatus();
+                </script>
+            </body>
+            </html>
+        `);
+
+        // Reiniciar el cliente solo si no está conectado
+        if (connectionState !== 'CONNECTED' && connectionState !== 'CONNECTING') {
+            // Intentar reiniciar el cliente
+            await client.destroy();
+            global.client = new Client({
+                authStrategy: new LocalAuth(),
+                puppeteer: {
+                    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+                    headless: true
+                }
+            });
+            
+            // Restablecer eventos
+            client.on('qr', (qr) => {
+                console.log('📱 Nuevo código QR generado');
+                currentQR = qr;
+                qrcode.generate(qr, { small: true });
+            });
+            
+            client.on('ready', () => {
+                console.log('🤖 Bot de WhatsApp reiniciado y listo');
+                currentQR = null;
+            });
+            
+            client.on('message', async (msg) => {
+                const remitente = msg.from;
+                const mensaje = msg.body;
+                const fecha = new Date().toISOString();
+            
+                db.run(`INSERT INTO mensajes (remitente, mensaje, fecha) VALUES (?, ?, ?)`,
+                    [remitente, mensaje, fecha],
+                    (err) => {
+                        if (err) {
+                            console.error("❌ Error al guardar mensaje:", err.message);
+                        } else {
+                            console.log(`💾 Mensaje guardado de ${remitente}: "${mensaje}"`);
+                        }
+                    }
+                );
+            
+                await learningHandler.processMessage(msg);
+            });
+            
+            // Inicializar cliente
+            await client.initialize();
+        }
+        
+    } catch (error) {
+        console.error("❌ Error al generar QR:", error);
+        res.status(500).send("Error al generar QR. Intente nuevamente.");
+    }
 });
 
 // Página principal con consola de mensajes y patrones en tiempo real
 app.get('/', (req, res) => {
+    const connState = client.getState();
+    const isConnected = connState === 'CONNECTED';
+    
+    if (!isConnected && currentQR) {
+        // Si no está conectado y hay un QR, redirigir a la página del QR
+        res.redirect('/generate-qr');
+        return;
+    }
+    
     res.send(`
         <!DOCTYPE html>
         <html lang="es">
@@ -186,11 +428,23 @@ app.get('/', (req, res) => {
                 .tabs { display: flex; justify-content: center; margin-bottom: 20px; }
                 .tab { padding: 10px 20px; margin: 0 5px; background: #ddd; border-radius: 5px 5px 0 0; cursor: pointer; }
                 .tab.active { background: #2196F3; color: white; }
-                button { background: blue; color: white; padding: 10px; border: none; cursor: pointer; margin-top: 10px; border-radius: 5px; }
+                button { background: #2196F3; color: white; padding: 10px; border: none; cursor: pointer; margin: 5px; border-radius: 5px; }
+                .status-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 5px; }
+                .status-connected { background-color: #4CAF50; }
+                .status-disconnected { background-color: #F44336; }
+                .status-bar { margin: 10px 0; padding: 10px; border-radius: 5px; background-color: #f0f0f0; }
+                .danger { background-color: #F44336; }
             </style>
         </head>
         <body>
             <h1>🧠 Bot de WhatsApp en Modo Aprendizaje</h1>
+            
+            <div class="status-bar">
+                <div class="status-indicator ${isConnected ? 'status-connected' : 'status-disconnected'}"></div>
+                Estado actual: <strong>${isConnected ? 'Conectado' : 'Desconectado'}</strong>
+                ${!isConnected ? ' <a href="/generate-qr"><button>Generar QR</button></a>' : ''}
+            </div>
+            
             <p>El bot está registrando mensajes y aprendiendo patrones de conversación sin enviar respuestas.</p>
             
             <div class="stats" id="statsContainer">
@@ -209,7 +463,7 @@ app.get('/', (req, res) => {
             </div>
             
             <div class="controls">
-                <a href="/logout"><button style="background: red;">❌ Cerrar Sesión</button></a>
+                <a href="/logout"><button class="danger">❌ Cerrar Sesión</button></a>
                 <a href="/export/json"><button>📂 Exportar Mensajes (JSON)</button></a>
                 <a href="/export/csv"><button>📂 Exportar Mensajes (CSV)</button></a>
                 <a href="/export/patterns/json"><button>📂 Exportar Patrones (JSON)</button></a>
@@ -270,6 +524,11 @@ app.get('/', (req, res) => {
                         const messages = await response.json();
                         const chatBox = document.getElementById("chatBox");
                         chatBox.innerHTML = "";
+                        
+                        if (messages.length === 0) {
+                            chatBox.innerHTML = "<p>No hay mensajes recibidos aún</p>";
+                            return;
+                        }
                         
                         messages.forEach(msg => {
                             chatBox.innerHTML += \`
