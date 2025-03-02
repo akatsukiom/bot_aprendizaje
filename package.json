@@ -10,6 +10,7 @@
     "puppeteer": "^24.2.1",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
+    "sqlite3": "^5.1.7",
     "whatsapp-web.js": "^1.18.4"
   }
 }

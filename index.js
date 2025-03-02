@@ -1,12 +1,27 @@
-// index.js corregido para mostrar el QR en una página web
+// index.js - Bot que almacena mensajes en SQLite sin responder
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode');
+const sqlite3 = require('sqlite3').verbose();
 const express = require('express');
+const path = require('path');
 
 const app = express();
 const port = process.env.PORT || 8000;
 
-let qrCodeUrl = ''; // Variable para almacenar el QR
+// Configuración de la base de datos SQLite
+const dbPath = path.join(__dirname, 'mensajes.db');
+const db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+        console.error("❌ Error al conectar con la base de datos:", err.message);
+    } else {
+        console.log("📂 Base de datos SQLite conectada");
+        db.run(`CREATE TABLE IF NOT EXISTS mensajes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            remitente TEXT,
+            mensaje TEXT,
+            fecha TEXT
+        )`);
+    }
+});
 
 const client = new Client({
     authStrategy: new LocalAuth(),
@@ -16,43 +31,27 @@ const client = new Client({
     }
 });
 
-// Evento para generar el QR en una URL accesible
-client.on('qr', async (qr) => {
-    console.log("⚡ Código QR generado, accede a /qr para escanearlo.");
-    qrCodeUrl = await qrcode.toDataURL(qr);
-});
-
-// Evento cuando el bot está listo
-client.on('ready', () => {
-    console.log("✅ Bot conectado correctamente");
-});
-
-// Evento para manejar mensajes
+// Evento para almacenar mensajes en la base de datos
 client.on('message', async (msg) => {
-    console.log(`📩 Mensaje recibido: ${msg.body}`);
-    if (msg.body.toLowerCase() === 'hola') {
-        await msg.reply("👋 ¡Hola! Soy tu bot de WhatsApp.");
-    }
+    const remitente = msg.from;
+    const mensaje = msg.body;
+    const fecha = new Date().toISOString();
+
+    db.run(`INSERT INTO mensajes (remitente, mensaje, fecha) VALUES (?, ?, ?)`,
+        [remitente, mensaje, fecha],
+        (err) => {
+            if (err) {
+                console.error("❌ Error al guardar mensaje:", err.message);
+            } else {
+                console.log(`💾 Mensaje guardado de ${remitente}: "${mensaje}"`);
+            }
+        }
+    );
 });
 
-// Servidor Web para Mostrar el QR
+// Servidor Web para verificar el estado
 app.get('/', (req, res) => {
-    res.send(`
-        <h1>Bot de WhatsApp</h1>
-        <p>Estado: ${qrCodeUrl ? "Escanea el QR para conectarte" : "✅ Bot ya conectado"}</p>
-        ${qrCodeUrl ? `<img src="${qrCodeUrl}" alt="Código QR" />` : ""}
-    `);
-});
-
-// Ruta específica para ver el QR
-app.get('/qr', (req, res) => {
-    if (!qrCodeUrl) {
-        return res.send("<h1>✅ Bot ya está conectado</h1>");
-    }
-    res.send(`
-        <h1>Escanea este código QR</h1>
-        <img src="${qrCodeUrl}" alt="Código QR" />
-    `);
+    res.send("<h1>📡 Bot de WhatsApp activo y guardando mensajes en SQLite</h1>");
 });
 
 app.listen(port, () => {
