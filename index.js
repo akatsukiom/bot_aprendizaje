@@ -1,3 +1,4 @@
+// index.js corregido para mostrar el QR en una página web
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const express = require('express');
@@ -24,6 +25,14 @@ client.on('qr', async (qr) => {
 // Evento cuando el bot está listo
 client.on('ready', () => {
     console.log("✅ Bot conectado correctamente");
+});
+
+// Evento para manejar mensajes
+client.on('message', async (msg) => {
+    console.log(`📩 Mensaje recibido: ${msg.body}`);
+    if (msg.body.toLowerCase() === 'hola') {
+        await msg.reply("👋 ¡Hola! Soy tu bot de WhatsApp.");
+    }
 });
 
 // Servidor Web para Mostrar el QR
