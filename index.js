@@ -1,4 +1,4 @@
-// index.js - Bot que almacena mensajes en SQLite sin responder
+// index.js - Bot que almacena mensajes en SQLite sin responder y se mantiene activo
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const sqlite3 = require('sqlite3').verbose();
 const express = require('express');
@@ -48,6 +48,23 @@ client.on('message', async (msg) => {
         }
     );
 });
+
+// Mantener el bot activo en Railway
+setInterval(() => {
+    console.log("🔄 Bot sigue corriendo...");
+}, 10000);
+
+// Mostrar los mensajes almacenados en logs para verificar
+setTimeout(() => {
+    db.all("SELECT * FROM mensajes", [], (err, rows) => {
+        if (err) {
+            console.error("❌ Error al obtener mensajes:", err.message);
+        } else {
+            console.log("📜 Mensajes guardados en la base de datos:");
+            console.table(rows);
+        }
+    });
+}, 30000);
 
 // Servidor Web para verificar el estado
 app.get('/', (req, res) => {
