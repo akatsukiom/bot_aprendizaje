@@ -1,4 +1,5 @@
 // index.js - Bot de WhatsApp en modo aprendizaje (solo captura, sin respuestas)
+
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const sqlite3 = require('sqlite3').verbose();
@@ -50,13 +51,13 @@ const learningHandler = new LearningHandler();
 client.on('qr', (qr) => {
     console.log('📱 Código QR generado:');
     qrcode.generate(qr, { small: true });
-    currentQR = qr; // Guardar el QR actual
+    currentQR = qr; 
 });
 
 // Evento cuando el cliente está listo
 client.on('ready', () => {
     console.log('🤖 Bot de WhatsApp listo y en modo aprendizaje');
-    currentQR = null; // Limpiar QR cuando estamos conectados
+    currentQR = null;
 });
 
 // Evento para almacenar mensajes en la base de datos y procesar aprendizaje
@@ -66,7 +67,8 @@ client.on('message', async (msg) => {
     const fecha = new Date().toISOString();
 
     // Guardar en la base de datos principal
-    db.run(`INSERT INTO mensajes (remitente, mensaje, fecha) VALUES (?, ?, ?)`,
+    db.run(
+        `INSERT INTO mensajes (remitente, mensaje, fecha) VALUES (?, ?, ?)`,
         [remitente, mensaje, fecha],
         (err) => {
             if (err) {
@@ -115,13 +117,23 @@ app.get('/learning/patterns', (req, res) => {
     );
 });
 
-// Ruta para obtener el estado actual del QR
-app.get('/qr-status', (req, res) => {
-    const state = client.getState() || 'DISCONNECTED';
-    res.json({
-        state: state,
-        qr: currentQR
-    });
+// Ruta para obtener el estado actual del QR (ahora asíncrona) // <-- Cambio
+app.get('/qr-status', async (req, res) => {
+    try {
+        // Esperamos el estado real del cliente
+        const state = await client.getState();  // <-- Cambio
+        res.json({
+            state: state,
+            qr: currentQR
+        });
+    } catch (err) {
+        console.error("Error al obtener el estado:", err);
+        // En caso de error, devolvemos 'DISCONNECTED'
+        res.json({
+            state: 'DISCONNECTED',
+            qr: currentQR
+        });
+    }
 });
 
 // Ruta para exportar la base de datos a JSON
@@ -158,7 +170,9 @@ app.get('/export/csv', (req, res) => {
         }
         let csvContent = "id,remitente,mensaje,fecha\n";
         rows.forEach(row => {
-            csvContent += `${row.id},"${row.remitente}","${row.mensaje.replace(/"/g, '""')}","${row.fecha}"\n`;
+            // Escapar comillas internas en "mensaje"
+            const safeMessage = row.mensaje.replace(/"/g, '""');
+            csvContent += `${row.id},"${row.remitente}","${safeMessage}","${row.fecha}"\n`;
         });
         res.setHeader('Content-Disposition', 'attachment; filename=mensajes.csv');
         res.setHeader('Content-Type', 'text/csv');
@@ -208,7 +222,7 @@ app.get('/logout', async (req, res) => {
                     }
                 });
                 
-                // Volver a registrar los eventos
+                // Re-registrar eventos
                 client.on('qr', (qr) => {
                     console.log('📱 Nuevo código QR generado');
                     qrcode.generate(qr, { small: true });
@@ -252,11 +266,11 @@ app.get('/logout', async (req, res) => {
     }
 });
 
-// Ruta para forzar la regeneración del QR
+// Ruta para forzar la regeneración del QR (ahora asíncrona) // <-- Cambio
 app.get('/generate-qr', async (req, res) => {
     try {
-        // Estado actual del cliente
-        const connectionState = client.getState();
+        // Esperar el estado real del cliente // <-- Cambio
+        const connectionState = await client.getState(); // <-- Cambio
         
         if (connectionState === 'CONNECTED') {
             res.send(`
@@ -345,9 +359,8 @@ app.get('/generate-qr', async (req, res) => {
             </html>
         `);
 
-        // Reiniciar el cliente solo si no está conectado
+        // Si no está conectado ni conectándose, reiniciamos el cliente
         if (connectionState !== 'CONNECTED' && connectionState !== 'CONNECTING') {
-            // Intentar reiniciar el cliente
             await client.destroy();
             global.client = new Client({
                 authStrategy: new LocalAuth(),
@@ -357,7 +370,7 @@ app.get('/generate-qr', async (req, res) => {
                 }
             });
             
-            // Restablecer eventos
+            // Re-registrar eventos
             client.on('qr', (qr) => {
                 console.log('📱 Nuevo código QR generado');
                 currentQR = qr;
@@ -399,17 +412,20 @@ app.get('/generate-qr', async (req, res) => {
 });
 
 // Página principal con consola de mensajes y patrones en tiempo real
-app.get('/', (req, res) => {
-    const connState = client.getState();
-    const isConnected = connState === 'CONNECTED';
-    
-    if (!isConnected && currentQR) {
-        // Si no está conectado y hay un QR, redirigir a la página del QR
-        res.redirect('/generate-qr');
-        return;
-    }
-    
-    res.send(`
+// Ahora asíncrona para obtener el estado real // <-- Cambio
+app.get('/', async (req, res) => {
+    try {
+        // Esperamos el estado real del cliente // <-- Cambio
+        const connState = await client.getState(); // <-- Cambio
+        const isConnected = (connState === 'CONNECTED');
+
+        // Si no está conectado y tenemos un QR, redirigimos a la página del QR
+        if (!isConnected && currentQR) {
+            res.redirect('/generate-qr');
+            return;
+        }
+
+        res.send(`
         <!DOCTYPE html>
         <html lang="es">
         <head>
@@ -444,165 +460,141 @@ app.get('/', (req, res) => {
                 Estado actual: <strong>${isConnected ? 'Conectado' : 'Desconectado'}</strong>
                 ${!isConnected ? ' <a href="/generate-qr"><button>Generar QR</button></a>' : ''}
             </div>
-            
-            <p>El bot está registrando mensajes y aprendiendo patrones de conversación sin enviar respuestas.</p>
-            
-            <div class="stats" id="statsContainer">
-                <div class="stat-box">
-                    <h3>Mensajes</h3>
-                    <div id="messageCount">Cargando...</div>
-                </div>
-                <div class="stat-box">
-                    <h3>Patrones</h3>
-                    <div id="patternCount">Cargando...</div>
-                </div>
-                <div class="stat-box">
-                    <h3>Contextos</h3>
-                    <div id="contextCount">Cargando...</div>
-                </div>
+
+            <div>
+                <a href="/logout"><button class="danger">Cerrar Sesión</button></a>
             </div>
-            
-            <div class="controls">
-                <a href="/logout"><button class="danger">❌ Cerrar Sesión</button></a>
-                <a href="/export/json"><button>📂 Exportar Mensajes (JSON)</button></a>
-                <a href="/export/csv"><button>📂 Exportar Mensajes (CSV)</button></a>
-                <a href="/export/patterns/json"><button>📂 Exportar Patrones (JSON)</button></a>
-            </div>
-            
+
             <div class="tabs">
-                <div class="tab active" id="messagesTab">Mensajes</div>
-                <div class="tab" id="patternsTab">Patrones Aprendidos</div>
+                <div class="tab active" onclick="showTab('messages')">Mensajes</div>
+                <div class="tab" onclick="showTab('patterns')">Patrones Aprendidos</div>
             </div>
-            
+
             <div class="container">
-                <div class="panel" id="messagesPanel">
+                <div id="messages" class="panel">
                     <h2>📩 Mensajes Recibidos</h2>
-                    <div id="chatBox"></div>
+                    <div id="message-list">Cargando...</div>
                 </div>
                 
-                <div class="panel" id="patternsPanel" style="display: none;">
-                    <h2>🧠 Patrones Aprendidos</h2>
-                    <div id="patternsList"></div>
+                <div id="patterns" class="panel" style="display:none;">
+                    <h2>🧩 Patrones Aprendidos</h2>
+                    <div id="pattern-list">Cargando...</div>
                 </div>
             </div>
-            
+
+            <div class="stats">
+                <div class="stat-box">
+                    <span id="total-messages">0</span><br>Mensajes
+                </div>
+                <div class="stat-box">
+                    <span id="total-patterns">0</span><br>Patrones
+                </div>
+                <div class="stat-box">
+                    <span id="total-contexts">0</span><br>Contextos
+                </div>
+            </div>
+
+            <button onclick="exportMessagesJSON()">Exportar Mensajes (JSON)</button>
+            <button onclick="exportMessagesCSV()">Exportar Mensajes (CSV)</button>
+            <button onclick="exportPatternsJSON()">Exportar Patrones (JSON)</button>
+
             <script>
-                // Cambiar entre pestañas
-                document.getElementById('messagesTab').addEventListener('click', () => {
-                    document.getElementById('messagesTab').classList.add('active');
-                    document.getElementById('patternsTab').classList.remove('active');
-                    document.getElementById('messagesPanel').style.display = 'block';
-                    document.getElementById('patternsPanel').style.display = 'none';
-                });
-                
-                document.getElementById('patternsTab').addEventListener('click', () => {
-                    document.getElementById('patternsTab').classList.add('active');
-                    document.getElementById('messagesTab').classList.remove('active');
-                    document.getElementById('patternsPanel').style.display = 'block';
-                    document.getElementById('messagesPanel').style.display = 'none';
-                    fetchPatterns();
-                });
-                
-                // Cargar estadísticas
-                async function fetchStats() {
-                    try {
-                        const response = await fetch('/learning/stats');
-                        const stats = await response.json();
-                        
-                        document.getElementById('messageCount').textContent = stats.mensajes;
-                        document.getElementById('patternCount').textContent = stats.patrones;
-                        document.getElementById('contextCount').textContent = stats.contextos;
-                    } catch (error) {
-                        console.error('Error cargando estadísticas:', error);
+                function showTab(tabId) {
+                    document.getElementById('messages').style.display = (tabId === 'messages') ? 'block' : 'none';
+                    document.getElementById('patterns').style.display = (tabId === 'patterns') ? 'block' : 'none';
+                    
+                    const tabs = document.getElementsByClassName('tab');
+                    for (let i = 0; i < tabs.length; i++) {
+                        tabs[i].classList.remove('active');
                     }
+                    event.target.classList.add('active');
                 }
-                
-                // Cargar mensajes
-                async function fetchMessages() {
+
+                async function loadMessages() {
                     try {
                         const response = await fetch('/messages');
-                        const messages = await response.json();
-                        const chatBox = document.getElementById("chatBox");
-                        chatBox.innerHTML = "";
-                        
-                        if (messages.length === 0) {
-                            chatBox.innerHTML = "<p>No hay mensajes recibidos aún</p>";
-                            return;
-                        }
-                        
-                        messages.forEach(msg => {
-                            chatBox.innerHTML += \`
-                                <div class="message">
-                                    <strong>\${msg.remitente}</strong>: \${msg.mensaje.replace(/</g, "&lt;").replace(/>/g, "&gt;")}
-                                    <div class="timestamp">\${new Date(msg.fecha).toLocaleString()}</div>
-                                </div>
+                        const data = await response.json();
+                        const messageList = document.getElementById('message-list');
+                        messageList.innerHTML = '';
+                        data.forEach(msg => {
+                            const div = document.createElement('div');
+                            div.className = 'message';
+                            div.innerHTML = \`
+                                <strong>\${msg.remitente}:</strong> \${msg.mensaje}
+                                <div class="timestamp">\${msg.fecha}</div>
                             \`;
+                            messageList.appendChild(div);
                         });
-                        
-                        chatBox.scrollTop = chatBox.scrollHeight;
-                    } catch (error) {
-                        console.error('Error cargando mensajes:', error);
+                    } catch (err) {
+                        console.error('Error al cargar mensajes:', err);
                     }
                 }
-                
-                // Cargar patrones
-                async function fetchPatterns() {
+
+                async function loadPatterns() {
                     try {
                         const response = await fetch('/learning/patterns');
-                        const patterns = await response.json();
-                        const patternsList = document.getElementById("patternsList");
-                        patternsList.innerHTML = "";
-                        
-                        if (patterns.length === 0) {
-                            patternsList.innerHTML = "<p>Aún no se han aprendido patrones</p>";
-                            return;
-                        }
-                        
-                        patterns.forEach(pattern => {
-                            const categoryClass = \`category-\${pattern.categoria || 'general'}\`;
-                            
-                            patternsList.innerHTML += \`
-                                <div class="pattern">
-                                    <strong>Pregunta:</strong> \${pattern.patron.replace(/</g, "&lt;").replace(/>/g, "&gt;")} 
-                                    <span class="pattern-category \${categoryClass}">\${pattern.categoria || 'general'}</span><br>
-                                    <strong>Respuesta:</strong> \${pattern.respuesta.replace(/</g, "&lt;").replace(/>/g, "&gt;")}<br>
-                                    <div class="timestamp">
-                                        Frecuencia: \${pattern.frecuencia} | 
-                                        Relevancia: \${Math.round(pattern.puntuacion_relevancia * 100)}% | 
-                                        Actualizado: \${new Date(pattern.ultima_actualizacion).toLocaleString()}
-                                    </div>
-                                </div>
+                        const data = await response.json();
+                        const patternList = document.getElementById('pattern-list');
+                        patternList.innerHTML = '';
+                        data.forEach(pt => {
+                            const div = document.createElement('div');
+                            div.className = 'pattern';
+                            div.innerHTML = \`
+                                <strong>Patrón:</strong> \${pt.patron}<br>
+                                <strong>Respuesta:</strong> \${pt.respuesta}<br>
+                                Frecuencia: \${pt.frecuencia} | Relevancia: \${pt.puntuacion_relevancia} | Categoría: \${pt.categoria}
+                                <div class="timestamp">Última actualización: \${pt.ultima_actualizacion}</div>
                             \`;
+                            patternList.appendChild(div);
                         });
-                    } catch (error) {
-                        console.error('Error cargando patrones:', error);
+                    } catch (err) {
+                        console.error('Error al cargar patrones:', err);
                     }
                 }
-                
-                // Inicializar la página
-                fetchStats();
-                fetchMessages();
-                
-                // Actualizar periódicamente
-                setInterval(fetchMessages, 3000);
-                setInterval(fetchStats, 10000);
+
+                async function loadStats() {
+                    try {
+                        const response = await fetch('/learning/stats');
+                        const data = await response.json();
+                        document.getElementById('total-messages').innerText = data.mensajes;
+                        document.getElementById('total-patterns').innerText = data.patrones;
+                        document.getElementById('total-contexts').innerText = data.contextos;
+                    } catch (err) {
+                        console.error('Error al cargar estadísticas:', err);
+                    }
+                }
+
+                function exportMessagesJSON() {
+                    window.location.href = '/export/json';
+                }
+
+                function exportMessagesCSV() {
+                    window.location.href = '/export/csv';
+                }
+
+                function exportPatternsJSON() {
+                    window.location.href = '/export/patterns/json';
+                }
+
+                // Cargar todo al inicio
+                loadMessages();
+                loadPatterns();
+                loadStats();
             </script>
         </body>
         </html>
-    `);
+        `);
+    } catch (error) {
+        console.error("Error en / ruta principal:", error);
+        res.status(500).send("Error al renderizar la página principal.");
+    }
 });
 
 // Iniciar el servidor
-app.listen(port, () => {
-    console.log(`🌍 Servidor corriendo en http://localhost:${port}`);
-});
+app.listen(port, async () => {
+    console.log(`🚀 Servidor corriendo en http://localhost:${port}`);
 
-// Inicializar el bot
-client.initialize();
-
-// Manejar cierre de la aplicación
-process.on('SIGINT', async () => {
-    console.log('Cerrando aplicación...');
-    await learningHandler.close();
-    process.exit(0);
+    // Inicializar el cliente de WhatsApp
+    await client.initialize();
+    console.log("✅ Cliente de WhatsApp inicializado");
 });
