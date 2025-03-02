@@ -1,8 +1,9 @@
-// index.js - Bot que almacena mensajes en SQLite sin responder y se mantiene activo
+// index.js - Bot que almacena mensajes en SQLite y muestra en tiempo real sin responder
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const sqlite3 = require('sqlite3').verbose();
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const port = process.env.PORT || 8000;
@@ -54,21 +55,76 @@ setInterval(() => {
     console.log("🔄 Bot sigue corriendo...");
 }, 10000);
 
-// Mostrar los mensajes almacenados en logs para verificar
-setTimeout(() => {
-    db.all("SELECT * FROM mensajes", [], (err, rows) => {
+// Ruta para obtener los mensajes en tiempo real
+app.get('/messages', (req, res) => {
+    db.all("SELECT * FROM mensajes ORDER BY fecha DESC", [], (err, rows) => {
         if (err) {
-            console.error("❌ Error al obtener mensajes:", err.message);
-        } else {
-            console.log("📜 Mensajes guardados en la base de datos:");
-            console.table(rows);
+            return res.status(500).json({ error: err.message });
         }
+        res.json(rows);
     });
-}, 30000);
+});
 
-// Servidor Web para verificar el estado
+// Ruta para cerrar sesión y generar un nuevo QR
+app.get('/logout', (req, res) => {
+    const sessionPath = './.wwebjs_auth';
+    if (fs.existsSync(sessionPath)) {
+        fs.rmSync(sessionPath, { recursive: true });
+        console.log("🗑 Sesión eliminada. Se generará un nuevo QR.");
+    }
+    res.send(`
+        <h1>✅ Sesión cerrada</h1>
+        <p>Recarga la página para escanear un nuevo QR.</p>
+        <a href="/">🔄 Volver</a>
+    `);
+    process.exit(1); // Reinicia el proceso para generar QR
+});
+
+// Página principal con consola de mensajes en tiempo real
 app.get('/', (req, res) => {
-    res.send("<h1>📡 Bot de WhatsApp activo y guardando mensajes en SQLite</h1>");
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Bot de WhatsApp</title>
+            <style>
+                body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+                .chat-box { max-width: 600px; margin: auto; background: #f4f4f4; padding: 10px; border-radius: 10px; height: 300px; overflow-y: scroll; }
+                .message { text-align: left; margin-bottom: 10px; padding: 5px; border-radius: 5px; background: white; }
+                .timestamp { font-size: 12px; color: gray; }
+                button { background: red; color: white; padding: 10px; border: none; cursor: pointer; margin-top: 10px; }
+            </style>
+        </head>
+        <body>
+            <h1>📡 Bot de WhatsApp Activo</h1>
+            <p>El bot está funcionando correctamente.</p>
+            <a href="/logout"><button>❌ Cerrar Sesión</button></a>
+            <h2>📩 Mensajes Recibidos</h2>
+            <div class="chat-box" id="chatBox"></div>
+            <script>
+                async function fetchMessages() {
+                    const response = await fetch('/messages');
+                    const messages = await response.json();
+                    const chatBox = document.getElementById("chatBox");
+                    chatBox.innerHTML = "";
+                    messages.forEach(msg => {
+                        chatBox.innerHTML += `
+                            <div class="message">
+                                <strong>${msg.remitente}</strong>: ${msg.mensaje}
+                                <div class="timestamp">${new Date(msg.fecha).toLocaleString()}</div>
+                            </div>
+                        `;
+                    });
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+                setInterval(fetchMessages, 3000);
+                fetchMessages();
+            </script>
+        </body>
+        </html>
+    `);
 });
 
 app.listen(port, () => {
