@@ -1,4 +1,4 @@
-// index.js - Bot que almacena mensajes en SQLite y muestra en tiempo real sin responder
+// index.js - Bot que almacena mensajes en SQLite, muestra en tiempo real y permite exportación
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const sqlite3 = require('sqlite3').verbose();
 const express = require('express');
@@ -65,6 +65,33 @@ app.get('/messages', (req, res) => {
     });
 });
 
+// Ruta para exportar la base de datos a JSON
+app.get('/export/json', (req, res) => {
+    db.all("SELECT * FROM mensajes ORDER BY fecha DESC", [], (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        res.setHeader('Content-Disposition', 'attachment; filename=mensajes.json');
+        res.json(rows);
+    });
+});
+
+// Ruta para exportar la base de datos a CSV
+app.get('/export/csv', (req, res) => {
+    db.all("SELECT * FROM mensajes ORDER BY fecha DESC", [], (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        let csvContent = "id,remitente,mensaje,fecha\n";
+        rows.forEach(row => {
+            csvContent += `${row.id},"${row.remitente}","${row.mensaje}","${row.fecha}"\n`;
+        });
+        res.setHeader('Content-Disposition', 'attachment; filename=mensajes.csv');
+        res.setHeader('Content-Type', 'text/csv');
+        res.send(csvContent);
+    });
+});
+
 // Ruta para cerrar sesión y generar un nuevo QR
 app.get('/logout', (req, res) => {
     const sessionPath = './.wwebjs_auth';
@@ -72,15 +99,11 @@ app.get('/logout', (req, res) => {
         fs.rmSync(sessionPath, { recursive: true });
         console.log("🗑 Sesión eliminada. Se generará un nuevo QR.");
     }
-    res.send(`
-        <h1>✅ Sesión cerrada</h1>
-        <p>Recarga la página para escanear un nuevo QR.</p>
-        <a href="/">🔄 Volver</a>
-    `);
-    process.exit(1); // Reinicia el proceso para generar QR
+    res.send("<h1>✅ Sesión cerrada</h1><p>Recarga la página para escanear un nuevo QR.</p><a href='/'>🔄 Volver</a>");
+    process.exit(1);
 });
 
-// Página principal con consola de mensajes en tiempo real
+// Página principal con consola de mensajes en tiempo real y botones de exportación
 app.get('/', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -94,13 +117,15 @@ app.get('/', (req, res) => {
                 .chat-box { max-width: 600px; margin: auto; background: #f4f4f4; padding: 10px; border-radius: 10px; height: 300px; overflow-y: scroll; }
                 .message { text-align: left; margin-bottom: 10px; padding: 5px; border-radius: 5px; background: white; }
                 .timestamp { font-size: 12px; color: gray; }
-                button { background: red; color: white; padding: 10px; border: none; cursor: pointer; margin-top: 10px; }
+                button { background: blue; color: white; padding: 10px; border: none; cursor: pointer; margin-top: 10px; }
             </style>
         </head>
         <body>
             <h1>📡 Bot de WhatsApp Activo</h1>
             <p>El bot está funcionando correctamente.</p>
-            <a href="/logout"><button>❌ Cerrar Sesión</button></a>
+            <a href="/logout"><button style="background: red;">❌ Cerrar Sesión</button></a>
+            <a href="/export/json"><button>📂 Exportar JSON</button></a>
+            <a href="/export/csv"><button>📂 Exportar CSV</button></a>
             <h2>📩 Mensajes Recibidos</h2>
             <div class="chat-box" id="chatBox"></div>
             <script>
@@ -110,12 +135,7 @@ app.get('/', (req, res) => {
                     const chatBox = document.getElementById("chatBox");
                     chatBox.innerHTML = "";
                     messages.forEach(msg => {
-                        chatBox.innerHTML += `
-                            <div class="message">
-                                <strong>${msg.remitente}</strong>: ${msg.mensaje}
-                                <div class="timestamp">${new Date(msg.fecha).toLocaleString()}</div>
-                            </div>
-                        `;
+                        chatBox.innerHTML += `<div class="message"><strong>${msg.remitente}</strong>: ${msg.mensaje}<div class="timestamp">${new Date(msg.fecha).toLocaleString()}</div></div>`;
                     });
                     chatBox.scrollTop = chatBox.scrollHeight;
                 }
