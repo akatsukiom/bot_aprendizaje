@@ -43,14 +43,16 @@
         <div class="card-body">
           <p><strong>Número:</strong> <span id="number-1">-</span></p>
           <div class="btn-group btn-group-sm d-flex flex-column" role="group">
-            <!-- Eliminamos el botón "Conectar" -->
+            <!-- Botón Generar QR (visible solo si está DESCON/CONNECTING) -->
             <button class="btn btn-primary mb-2" id="btn-generate-qr-1" onclick="generateQR(1)">Generar QR</button>
+            <!-- Botón Cerrar Conexión (visible solo si está CONNECTED) -->
             <button class="btn btn-danger mb-2" id="btn-close-1" onclick="closeConnection(1)">Cerrar Conexión</button>
             <button class="btn btn-info" onclick="loadMessages(1)">Ver Mensajes</button>
           </div>
         </div>
       </div>
     </div>
+
     <!-- Conexión 2 -->
     <div class="col-md-4" id="connection-card-2">
       <div class="card">
@@ -68,6 +70,7 @@
         </div>
       </div>
     </div>
+
     <!-- Conexión 3 -->
     <div class="col-md-4" id="connection-card-3">
       <div class="card">
@@ -102,52 +105,94 @@
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 <script>
-  // Actualiza el estado de la conexión
+  // Actualiza el estado y número en la tarjeta
   function updateStatus(connectionId, status, number = '-') {
-    document.getElementById('status-' + connectionId).innerText = status;
+    // Actualizar la etiqueta de estado
+    document.getElementById('status-' + connectionId).innerText = 
+      status === 'CONNECTED' ? 'Conectado' : 'Desconectado';
+    
+    // Cambiar el color de la badge
     const badge = document.getElementById('status-' + connectionId);
-    badge.className = 'badge status-badge ' + (status === 'Conectado' ? 'badge-success' : 'badge-danger');
+    badge.className = 'badge status-badge ' + 
+      (status === 'CONNECTED' ? 'badge-success' : 'badge-danger');
+
+    // Actualizar número
     document.getElementById('number-' + connectionId).innerText = number;
 
-    // Si está conectado, ocultamos "Generar QR"
-    if (status === 'Conectado') {
-      document.getElementById('btn-generate-qr-' + connectionId).style.display = 'none';
+    // Mostrar/ocultar botones según el estado
+    const btnGenerate = document.getElementById('btn-generate-qr-' + connectionId);
+    const btnClose = document.getElementById('btn-close-' + connectionId);
+
+    if (status === 'CONNECTED') {
+      // Ocultar "Generar QR", mostrar "Cerrar Conexión"
+      btnGenerate.style.display = 'none';
+      btnClose.style.display = 'block';
     } else {
-      document.getElementById('btn-generate-qr-' + connectionId).style.display = 'block';
+      // Mostrar "Generar QR", ocultar "Cerrar Conexión"
+      btnGenerate.style.display = 'block';
+      btnClose.style.display = 'none';
     }
   }
 
-  // Redirige a la ruta que genera el QR para la conexión
+  // Redirige para generar QR
   function generateQR(connectionId) {
-    // Llama a tu backend para generar QR. Por ejemplo:
+    // Ajusta la ruta si tu backend usa otra
     window.location.href = '/generate-qr?connection=' + connectionId;
   }
 
-  // Simula cerrar la conexión
+  // Cierra la conexión (simulado o real)
   function closeConnection(connectionId) {
     alert('Cerrando conexión ' + connectionId);
-    updateStatus(connectionId, 'Desconectado');
+    // Aquí harías un fetch a /logout?connection=... si tu backend lo soporta
+    // O a /close-connection?connection=...
+    // Por ahora, simulamos que se desconecta
+    updateStatus(connectionId, 'DISCONNECTED', '-');
     if (document.getElementById('current-connection').innerText == connectionId) {
       document.getElementById('current-connection').innerText = '-';
       document.getElementById('message-list').innerHTML = '<p class="text-muted">Selecciona una conexión para ver sus mensajes.</p>';
     }
   }
 
-  // Simula cargar mensajes de una conexión
+  // Carga los mensajes de una conexión (ejemplo)
   function loadMessages(connectionId) {
     document.getElementById('current-connection').innerText = connectionId;
-    // Aquí harías un fetch a /messages?connection=connectionId
-    const messages = `
-      <div class="mb-2">
-        <strong>Usuario:</strong> Hola, ¿cómo estás? (Conexión ${connectionId})<br>
-        <small class="text-muted">2023-03-03T02:16:11.639Z</small>
-      </div>
-      <div class="mb-2">
-        <strong>Bot:</strong> ¡Hola! Todo bien, gracias. (Conexión ${connectionId})<br>
-        <small class="text-muted">2023-03-03T02:16:12.000Z</small>
-      </div>
-    `;
-    document.getElementById('message-list').innerHTML = messages;
+
+    // 1) Consultar el estado real
+    fetch('/connection-status?connection=' + connectionId)
+      .then(r => r.json())
+      .then(data => {
+        // data.state => "CONNECTED" o "DISCONNECTED"
+        // data.number => el número real o "-"
+        updateStatus(connectionId, data.state, data.number);
+
+        // 2) Si está conectado, cargamos mensajes reales
+        if (data.state === 'CONNECTED') {
+          fetch('/messages?connection=' + connectionId)
+            .then(r => r.json())
+            .then(msgs => {
+              let html = '';
+              msgs.forEach(m => {
+                html += `
+                  <div class="mb-2">
+                    <strong>${m.fromMe ? 'Bot' : 'Usuario'}:</strong> ${m.mensaje}<br>
+                    <small class="text-muted">${m.fecha}</small>
+                  </div>
+                `;
+              });
+              document.getElementById('message-list').innerHTML = html;
+            })
+            .catch(err => {
+              console.error('Error al cargar mensajes:', err);
+              document.getElementById('message-list').innerHTML = '<p class="text-danger">Error al cargar mensajes.</p>';
+            });
+        } else {
+          document.getElementById('message-list').innerHTML = '<p class="text-muted">No conectado. Genera QR y escanéalo.</p>';
+        }
+      })
+      .catch(err => {
+        console.error('Error al consultar estado:', err);
+        document.getElementById('message-list').innerHTML = '<p class="text-danger">Error al consultar estado.</p>';
+      });
   }
 </script>
 </body>
