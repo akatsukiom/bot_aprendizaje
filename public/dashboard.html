@@ -121,21 +121,18 @@
     }
   }
 
-  // Simula la acción de generar QR para una conexión
+  // Redirige a la ruta que genera el QR para la conexión
   function generateQR(connectionId) {
-    // Aquí harías una llamada fetch a tu endpoint, por ejemplo: /generate-qr?connection=connectionId
-    alert('Generar QR para la Conexión ' + connectionId);
-    updateStatus(connectionId, 'Esperando QR');
+    window.location.href = '/generate-qr?connection=' + connectionId;
   }
 
   // Simula abrir la conexión
   function openConnection(connectionId) {
+    // Aquí podrías llamar a tu endpoint real con fetch
     alert('Iniciando conexión ' + connectionId);
-    // Simulación: se actualiza a "Conectado" y se asigna un número (esto vendría del backend)
+    // Simulación: se actualiza a "Conectado" y se asigna un número
     updateStatus(connectionId, 'Conectado', '+52123456789');
     document.getElementById('current-connection').innerText = connectionId;
-    // Redirigir automáticamente al panel principal, si fuera necesario
-    // window.location.href = '/dashboard?connection=' + connectionId;
   }
 
   // Simula cerrar la conexión
@@ -151,7 +148,7 @@
   // Simula cargar mensajes de una conexión
   function loadMessages(connectionId) {
     document.getElementById('current-connection').innerText = connectionId;
-    // Aquí harías un fetch a tu endpoint, por ejemplo: /messages?connection=connectionId
+    // Aquí harías un fetch a /messages?connection=connectionId para obtener mensajes reales
     const messages = `
       <div class="mb-2">
         <strong>Usuario:</strong> Hola, ¿cómo estás? (Conexión ${connectionId})<br>
@@ -163,16 +160,6 @@
       </div>
     `;
     document.getElementById('message-list').innerHTML = messages;
-  }
-
-  // Ejemplo de polling para actualizar el estado en tiempo real (simulación)
-  // Aquí podrías hacer fetch a /qr-status y actualizar la interfaz
-  function pollStatus(connectionId) {
-    // Simulación: si la conexión ya está "Conectado", redirigir o actualizar la interfaz
-    // En una implementación real, harías:
-    // fetch('/qr-status?connection=' + connectionId)
-    //   .then(response => response.json())
-    //   .then(data => { ... });
   }
 </script>
 </body>
