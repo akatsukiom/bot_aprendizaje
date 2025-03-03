@@ -5,63 +5,85 @@ const fs = require('fs');
 const qrcode = require('qrcode-terminal');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 
-// Importamos la instancia actual del cliente desde el módulo client.js
-// Nota: Usamos una variable let para poder reasignarla tras reiniciar
+// Importar la instancia actual del cliente (con let para poder reasignar tras logout)
 let client = require('../client');
 
+// Importar la DB y el learningHandler
 const db = require('../db');
 const learningHandler = require('../src/handlers/learningHandler');
 
-// Variable global para guardar el código QR actual
+// Variable para guardar el QR actual
 let currentQR = null;
 
 /* ============================================
    EVENTOS DEL CLIENTE DE WHATSAPP
 ============================================ */
-// Cuando se genera un QR
+
+// 1) Evento: se genera un QR
 client.on('qr', (qr) => {
   console.log('📱 Código QR generado:');
   qrcode.generate(qr, { small: true });
   currentQR = qr;
 });
 
-// Cuando el cliente está listo
+// 2) Evento: el cliente está listo
 client.on('ready', () => {
   console.log('🤖 Bot de WhatsApp listo y en modo aprendizaje');
   currentQR = null;
 });
 
-// Cuando se recibe un mensaje
+// 3) Evento: llega un mensaje (del usuario)
 client.on('message', async (msg) => {
-  const remitente = msg.from;
+  const remitente = msg.from;         // Número del usuario
   const mensaje = msg.body;
   const fecha = new Date().toISOString();
 
-  // Guardar mensaje en la base de datos principal
-  db.run(
-    `INSERT INTO mensajes (remitente, mensaje, fecha) VALUES (?, ?, ?)`,
-    [remitente, mensaje, fecha],
-    (err) => {
-      if (err) {
-        console.error("❌ Error al guardar mensaje:", err.message);
-      } else {
-        console.log(`💾 Mensaje guardado de ${remitente}: "${mensaje}"`);
-      }
+  // Guardar mensaje en la base de datos con fromMe=0
+  db.run(`
+    INSERT INTO mensajes (remitente, mensaje, fecha, fromMe)
+    VALUES (?, ?, ?, ?)
+  `, [remitente, mensaje, fecha, 0], (err) => {
+    if (err) {
+      console.error("❌ Error al guardar mensaje (usuario):", err.message);
+    } else {
+      console.log(`💾 Mensaje de usuario guardado: "${mensaje}" de ${remitente}`);
     }
-  );
+  });
 
-  // Procesar el mensaje para aprendizaje
+  // Procesar el mensaje para aprendizaje (opcional)
   await learningHandler.processMessage(msg);
+});
+
+// 4) Evento: se crea un mensaje (incluye los que envía el bot)
+client.on('message_create', async (msg) => {
+  // Solo guardamos si lo envía el bot
+  if (msg.fromMe) {
+    const remitente = msg.to;         // A quién se lo envía el bot
+    const mensaje = msg.body;
+    const fecha = new Date().toISOString();
+
+    // Guardar mensaje en la base de datos con fromMe=1
+    db.run(`
+      INSERT INTO mensajes (remitente, mensaje, fecha, fromMe)
+      VALUES (?, ?, ?, ?)
+    `, [remitente, mensaje, fecha, 1], (err) => {
+      if (err) {
+        console.error("❌ Error al guardar mensaje (bot):", err.message);
+      } else {
+        console.log(`💾 Mensaje del bot guardado: "${mensaje}" para ${remitente}`);
+      }
+    });
+  }
 });
 
 /* ============================================
    RUTAS RELACIONADAS CON WHATSAPP
 ============================================ */
 
-// Ruta para obtener el estado y el QR actual
+// Obtener estado y QR actual
 router.get('/qr-status', async (req, res) => {
   try {
-    // Si la página de Puppeteer no existe, consideramos que el cliente está desconectado
+    // Si Puppeteer no existe, asumimos desconectado
     if (!client.pupPage) {
       return res.json({ state: 'DISCONNECTED', qr: null });
     }
@@ -73,7 +95,7 @@ router.get('/qr-status', async (req, res) => {
   }
 });
 
-// Ruta para mostrar la página de QR
+// Mostrar la página de QR
 router.get('/generate-qr', async (req, res) => {
   try {
     const state = await client.getState();
@@ -83,7 +105,7 @@ router.get('/generate-qr', async (req, res) => {
         <p><a href="/">Volver al panel</a></p>
       `);
     }
-    // Renderizamos una página simple que hace polling a /qr-status para mostrar el QR
+    // Renderiza HTML con script que hace polling a /qr-status
     res.send(`
       <html>
       <head>
@@ -140,7 +162,7 @@ router.get('/generate-qr', async (req, res) => {
   }
 });
 
-// Ruta para cerrar sesión y reiniciar el cliente inmediatamente (Opción 1)
+// Cerrar sesión y reiniciar cliente inmediatamente
 router.get('/logout', async (req, res) => {
   try {
     // 1) Cerrar sesión de WhatsApp
@@ -158,7 +180,7 @@ router.get('/logout', async (req, res) => {
     await client.destroy();
     console.log("🔄 Cliente destruido.");
 
-    // 4) Crear e inicializar un NUEVO cliente inmediatamente
+    // 4) Crear e inicializar un NUEVO cliente
     client = new Client({
       authStrategy: new LocalAuth(),
       puppeteer: {
@@ -181,17 +203,37 @@ router.get('/logout', async (req, res) => {
       const remitente = msg.from;
       const mensaje = msg.body;
       const fecha = new Date().toISOString();
-      db.run(`INSERT INTO mensajes (remitente, mensaje, fecha) VALUES (?, ?, ?)`,
-        [remitente, mensaje, fecha],
-        (err) => {
-          if (err) {
-            console.error("❌ Error al guardar mensaje:", err.message);
-          } else {
-            console.log(`💾 Mensaje guardado de ${remitente}: "${mensaje}"`);
-          }
+
+      db.run(`
+        INSERT INTO mensajes (remitente, mensaje, fecha, fromMe)
+        VALUES (?, ?, ?, ?)
+      `, [remitente, mensaje, fecha, 0], (err) => {
+        if (err) {
+          console.error("❌ Error al guardar mensaje (usuario):", err.message);
+        } else {
+          console.log(`💾 Mensaje de usuario guardado: "${mensaje}" de ${remitente}`);
         }
-      );
+      });
+
       await learningHandler.processMessage(msg);
+    });
+    client.on('message_create', async (msg) => {
+      if (msg.fromMe) {
+        const remitente = msg.to;
+        const mensaje = msg.body;
+        const fecha = new Date().toISOString();
+
+        db.run(`
+          INSERT INTO mensajes (remitente, mensaje, fecha, fromMe)
+          VALUES (?, ?, ?, ?)
+        `, [remitente, mensaje, fecha, 1], (err) => {
+          if (err) {
+            console.error("❌ Error al guardar mensaje (bot):", err.message);
+          } else {
+            console.log(`💾 Mensaje del bot guardado: "${mensaje}" para ${remitente}`);
+          }
+        });
+      }
     });
 
     // 6) Inicializar el nuevo cliente
