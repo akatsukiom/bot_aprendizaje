@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard de Conexiones WhatsApp</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+    .card {
+      margin-bottom: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .connection-header {
+      font-size: 1.25rem;
+      font-weight: bold;
+    }
+    .status-badge {
+      font-size: 0.9rem;
+    }
+    .message-list {
+      max-height: 300px;
+      overflow-y: auto;
+      background-color: #ffffff;
+      padding: 15px;
+      border-radius: 5px;
+      box-shadow: inset 0 0 5px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+<div class="container my-4">
+  <h1 class="text-center mb-4">Panel de Conexiones WhatsApp</h1>
+  <div class="row">
+    <!-- Conexión 1 -->
+    <div class="col-md-4" id="connection-card-1">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="connection-header">Conexión 1</span>
+          <span class="badge badge-danger status-badge" id="status-1">Desconectado</span>
+        </div>
+        <div class="card-body">
+          <p><strong>Número:</strong> <span id="number-1">-</span></p>
+          <div class="btn-group btn-group-sm d-flex flex-column" role="group">
+            <!-- Este botón solo se muestra si NO está conectado -->
+            <button class="btn btn-primary mb-2" id="btn-generate-qr-1" onclick="generateQR(1)">Generar QR</button>
+            <button class="btn btn-warning mb-2" id="btn-connect-1" onclick="openConnection(1)">Conectar</button>
+            <button class="btn btn-danger mb-2" id="btn-close-1" onclick="closeConnection(1)">Cerrar Conexión</button>
+            <button class="btn btn-info" onclick="loadMessages(1)">Ver Mensajes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Conexión 2 -->
+    <div class="col-md-4" id="connection-card-2">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="connection-header">Conexión 2</span>
+          <span class="badge badge-danger status-badge" id="status-2">Desconectado</span>
+        </div>
+        <div class="card-body">
+          <p><strong>Número:</strong> <span id="number-2">-</span></p>
+          <div class="btn-group btn-group-sm d-flex flex-column" role="group">
+            <button class="btn btn-primary mb-2" id="btn-generate-qr-2" onclick="generateQR(2)">Generar QR</button>
+            <button class="btn btn-warning mb-2" id="btn-connect-2" onclick="openConnection(2)">Conectar</button>
+            <button class="btn btn-danger mb-2" id="btn-close-2" onclick="closeConnection(2)">Cerrar Conexión</button>
+            <button class="btn btn-info" onclick="loadMessages(2)">Ver Mensajes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Conexión 3 -->
+    <div class="col-md-4" id="connection-card-3">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="connection-header">Conexión 3</span>
+          <span class="badge badge-danger status-badge" id="status-3">Desconectado</span>
+        </div>
+        <div class="card-body">
+          <p><strong>Número:</strong> <span id="number-3">-</span></p>
+          <div class="btn-group btn-group-sm d-flex flex-column" role="group">
+            <button class="btn btn-primary mb-2" id="btn-generate-qr-3" onclick="generateQR(3)">Generar QR</button>
+            <button class="btn btn-warning mb-2" id="btn-connect-3" onclick="openConnection(3)">Conectar</button>
+            <button class="btn btn-danger mb-2" id="btn-close-3" onclick="closeConnection(3)">Cerrar Conexión</button>
+            <button class="btn btn-info" onclick="loadMessages(3)">Ver Mensajes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel de Mensajes -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <h2>Mensajes de la Conexión <span id="current-connection">-</span></h2>
+      <div class="message-list border p-3" id="message-list">
+        <p class="text-muted">Selecciona una conexión para ver sus mensajes.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- jQuery y Bootstrap JS -->
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+<script>
+  // Función para actualizar el estado de una conexión
+  function updateStatus(connectionId, status, number = '-') {
+    document.getElementById('status-' + connectionId).innerText = status;
+    const badge = document.getElementById('status-' + connectionId);
+    badge.className = 'badge status-badge ' + (status === 'Conectado' ? 'badge-success' : 'badge-danger');
+    document.getElementById('number-' + connectionId).innerText = number;
+    // Si está conectado, ocultamos los botones de "Generar QR" y "Conectar"
+    if (status === 'Conectado') {
+      document.getElementById('btn-generate-qr-' + connectionId).style.display = 'none';
+      document.getElementById('btn-connect-' + connectionId).style.display = 'none';
+    } else {
+      document.getElementById('btn-generate-qr-' + connectionId).style.display = 'block';
+      document.getElementById('btn-connect-' + connectionId).style.display = 'block';
+    }
+  }
+
+  // Simula la acción de generar QR para una conexión
+  function generateQR(connectionId) {
+    // Aquí harías una llamada fetch a tu endpoint, por ejemplo: /generate-qr?connection=connectionId
+    alert('Generar QR para la Conexión ' + connectionId);
+    updateStatus(connectionId, 'Esperando QR');
+  }
+
+  // Simula abrir la conexión
+  function openConnection(connectionId) {
+    alert('Iniciando conexión ' + connectionId);
+    // Simulación: se actualiza a "Conectado" y se asigna un número (esto vendría del backend)
+    updateStatus(connectionId, 'Conectado', '+52123456789');
+    document.getElementById('current-connection').innerText = connectionId;
+    // Redirigir automáticamente al panel principal, si fuera necesario
+    // window.location.href = '/dashboard?connection=' + connectionId;
+  }
+
+  // Simula cerrar la conexión
+  function closeConnection(connectionId) {
+    alert('Cerrando conexión ' + connectionId);
+    updateStatus(connectionId, 'Desconectado');
+    if (document.getElementById('current-connection').innerText == connectionId) {
+      document.getElementById('current-connection').innerText = '-';
+      document.getElementById('message-list').innerHTML = '<p class="text-muted">Selecciona una conexión para ver sus mensajes.</p>';
+    }
+  }
+
+  // Simula cargar mensajes de una conexión
+  function loadMessages(connectionId) {
+    document.getElementById('current-connection').innerText = connectionId;
+    // Aquí harías un fetch a tu endpoint, por ejemplo: /messages?connection=connectionId
+    const messages = `
+      <div class="mb-2">
+        <strong>Usuario:</strong> Hola, ¿cómo estás? (Conexión ${connectionId})<br>
+        <small class="text-muted">2023-03-03T02:16:11.639Z</small>
+      </div>
+      <div class="mb-2">
+        <strong>Bot:</strong> ¡Hola! Todo bien, gracias. (Conexión ${connectionId})<br>
+        <small class="text-muted">2023-03-03T02:16:12.000Z</small>
+      </div>
+    `;
+    document.getElementById('message-list').innerHTML = messages;
+  }
+
+  // Ejemplo de polling para actualizar el estado en tiempo real (simulación)
+  // Aquí podrías hacer fetch a /qr-status y actualizar la interfaz
+  function pollStatus(connectionId) {
+    // Simulación: si la conexión ya está "Conectado", redirigir o actualizar la interfaz
+    // En una implementación real, harías:
+    // fetch('/qr-status?connection=' + connectionId)
+    //   .then(response => response.json())
+    //   .then(data => { ... });
+  }
+</script>
+</body>
+</html>
