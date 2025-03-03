@@ -437,4 +437,4 @@ class LearningHandler {
     }
 }
 
-module.exports = LearningHandler;
+module.exports = new LearningHandler();
