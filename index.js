@@ -2,6 +2,8 @@
 const express = require('express');
 const app = express();
 const port = process.env.PORT || 8000;
+const connections = require('./connections');
+
 app.use(express.static('public'));
 
 // Importar rutas

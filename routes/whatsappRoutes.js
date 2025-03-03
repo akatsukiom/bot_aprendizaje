@@ -2,77 +2,90 @@
 const express = require('express');
 const router = express.Router();
 const fs = require('fs');
+const path = require('path');
 const qrcode = require('qrcode-terminal');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 
-// Importar la instancia actual del cliente (con let para poder reasignar tras logout)
+// Importamos la instancia actual del cliente (con let para poder reasignarla tras logout)
 let client = require('../client');
 
 // Importar la DB y el learningHandler
 const db = require('../db');
 const learningHandler = require('../src/handlers/learningHandler');
 
+// Importar el módulo de conexiones
+const connections = require('../connections');
+
 // Variable para guardar el QR actual
 let currentQR = null;
+
+// Variable global para saber a qué conexión corresponde la instancia actual
+let currentConnectionId = null;
 
 /* ============================================
    EVENTOS DEL CLIENTE DE WHATSAPP
 ============================================ */
 
-// 1) Evento: se genera un QR
+// Cuando se genera un QR, actualizamos currentQR
 client.on('qr', (qr) => {
   console.log('📱 Código QR generado:');
   qrcode.generate(qr, { small: true });
   currentQR = qr;
 });
 
-// 2) Evento: el cliente está listo
+// Cuando el cliente está listo, actualizamos la conexión en el módulo connections
 client.on('ready', () => {
   console.log('🤖 Bot de WhatsApp listo y en modo aprendizaje');
   currentQR = null;
+  if (currentConnectionId) {
+    // Actualizamos el estado a CONNECTED y obtenemos el número real del bot
+    connections[currentConnectionId].state = 'CONNECTED';
+    // Supongamos que client.info.wid.user contiene el número, ej.: '52123456789'
+    connections[currentConnectionId].number = client.info?.wid?.user || '-';
+  }
 });
 
-// 3) Evento: llega un mensaje (del usuario)
+// Evento: mensaje entrante (del usuario)
 client.on('message', async (msg) => {
-  const remitente = msg.from;         // Número del usuario
+  const remitente = msg.from;
   const mensaje = msg.body;
   const fecha = new Date().toISOString();
 
-  // Guardar mensaje en la base de datos con fromMe=0
-  db.run(`
-    INSERT INTO mensajes (remitente, mensaje, fecha, fromMe)
-    VALUES (?, ?, ?, ?)
-  `, [remitente, mensaje, fecha, 0], (err) => {
-    if (err) {
-      console.error("❌ Error al guardar mensaje (usuario):", err.message);
-    } else {
-      console.log(`💾 Mensaje de usuario guardado: "${mensaje}" de ${remitente}`);
+  db.run(
+    `INSERT INTO mensajes (remitente, mensaje, fecha, fromMe)
+     VALUES (?, ?, ?, ?)`,
+    [remitente, mensaje, fecha, 0],
+    (err) => {
+      if (err) {
+        console.error("❌ Error al guardar mensaje (usuario):", err.message);
+      } else {
+        console.log(`💾 Mensaje de usuario guardado: "${mensaje}" de ${remitente}`);
+      }
     }
-  });
+  );
 
-  // Procesar el mensaje para aprendizaje (opcional)
   await learningHandler.processMessage(msg);
 });
 
-// 4) Evento: se crea un mensaje (incluye los que envía el bot)
+// Evento: mensaje creado (incluye mensajes del bot)
 client.on('message_create', async (msg) => {
-  // Solo guardamos si lo envía el bot
   if (msg.fromMe) {
-    const remitente = msg.to;         // A quién se lo envía el bot
+    const remitente = msg.to;
     const mensaje = msg.body;
     const fecha = new Date().toISOString();
 
-    // Guardar mensaje en la base de datos con fromMe=1
-    db.run(`
-      INSERT INTO mensajes (remitente, mensaje, fecha, fromMe)
-      VALUES (?, ?, ?, ?)
-    `, [remitente, mensaje, fecha, 1], (err) => {
-      if (err) {
-        console.error("❌ Error al guardar mensaje (bot):", err.message);
-      } else {
-        console.log(`💾 Mensaje del bot guardado: "${mensaje}" para ${remitente}`);
+    db.run(
+      `INSERT INTO mensajes (remitente, mensaje, fecha, fromMe)
+       VALUES (?, ?, ?, ?)`,
+      [remitente, mensaje, fecha, 1],
+      (err) => {
+        if (err) {
+          console.error("❌ Error al guardar mensaje (bot):", err.message);
+        } else {
+          console.log(`💾 Mensaje del bot guardado: "${mensaje}" para ${remitente}`);
+        }
       }
-    });
+    );
   }
 });
 
@@ -80,24 +93,30 @@ client.on('message_create', async (msg) => {
    RUTAS RELACIONADAS CON WHATSAPP
 ============================================ */
 
-// Obtener estado y QR actual
-router.get('/qr-status', async (req, res) => {
-  try {
-    // Si Puppeteer no existe, asumimos desconectado
-    if (!client.pupPage) {
-      return res.json({ state: 'DISCONNECTED', qr: null });
-    }
-    const state = await client.getState();
-    res.json({ state, qr: currentQR });
-  } catch (err) {
-    console.error("Error al obtener el estado:", err);
-    res.json({ state: 'DISCONNECTED', qr: null });
+// Endpoint para obtener el estado y número de la conexión actual
+router.get('/connection-status', (req, res) => {
+  const connectionId = req.query.connection;
+  if (!connectionId || !connections[connectionId]) {
+    return res.json({ state: 'DISCONNECTED', number: '-' });
   }
+  res.json({
+    state: connections[connectionId].state,
+    number: connections[connectionId].number
+  });
 });
 
-// Mostrar la página de QR
+// Mostrar la página de QR (para iniciar conexión)
 router.get('/generate-qr', async (req, res) => {
   try {
+    const connectionId = req.query.connection;
+    if (!connectionId || !connections[connectionId]) {
+      return res.status(400).send("Parámetro de conexión inválido");
+    }
+    currentConnectionId = connectionId;
+    // Marcar la conexión como en proceso (CONNECTING)
+    connections[connectionId].state = 'CONNECTING';
+    connections[connectionId].number = '-';
+
     const state = await client.getState();
     if (state === 'CONNECTED') {
       return res.send(`
@@ -105,7 +124,7 @@ router.get('/generate-qr', async (req, res) => {
         <p><a href="/">Volver al panel</a></p>
       `);
     }
-    // Renderiza HTML con script que hace polling a /qr-status
+    // Renderizar la página del QR
     res.send(`
       <html>
       <head>
@@ -113,7 +132,7 @@ router.get('/generate-qr', async (req, res) => {
         <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
       </head>
       <body>
-        <h1>Generando código QR...</h1>
+        <h1>Generando código QR para la Conexión ${connectionId}...</h1>
         <div id="qrcode"></div>
         <div id="status">Esperando código QR...</div>
         <script>
@@ -136,13 +155,16 @@ router.get('/generate-qr', async (req, res) => {
           }
           async function checkStatus() {
             try {
-              const response = await fetch("/qr-status");
+              const response = await fetch("/connection-status?connection=${connectionId}");
               const data = await response.json();
               if (data.state === "CONNECTED") {
                 document.getElementById("status").innerText = "✅ Conectado exitosamente!";
                 document.getElementById("qrcode").innerHTML = "<h2>✅ Conectado</h2>";
                 clearInterval(intervalId);
                 setTimeout(() => { window.location.href = "/"; }, 3000);
+              } else if (data.state === "CONNECTING") {
+                // Si sigue conectando, se puede actualizar el estado o hacer polling
+                document.getElementById("status").innerText = "Conectando...";
               } else if (data.qr) {
                 createQR(data.qr);
               }
@@ -162,25 +184,21 @@ router.get('/generate-qr', async (req, res) => {
   }
 });
 
-// Cerrar sesión y reiniciar cliente inmediatamente
+// Ruta para cerrar sesión y reiniciar el cliente
 router.get('/logout', async (req, res) => {
   try {
-    // 1) Cerrar sesión de WhatsApp
     await client.logout();
     console.log("✅ Sesión de WhatsApp cerrada correctamente");
 
-    // 2) Eliminar carpeta de autenticación (opcional)
     const sessionPath = './.wwebjs_auth';
     if (fs.existsSync(sessionPath)) {
       fs.rmSync(sessionPath, { recursive: true, force: true });
       console.log("🗑 Carpeta de sesión eliminada");
     }
 
-    // 3) Destruir la instancia actual
     await client.destroy();
     console.log("🔄 Cliente destruido.");
 
-    // 4) Crear e inicializar un NUEVO cliente
     client = new Client({
       authStrategy: new LocalAuth(),
       puppeteer: {
@@ -189,7 +207,6 @@ router.get('/logout', async (req, res) => {
       }
     });
 
-    // 5) Volver a registrar los eventos
     client.on('qr', (qr) => {
       console.log('📱 Nuevo QR generado tras logout');
       qrcode.generate(qr, { small: true });
@@ -198,12 +215,15 @@ router.get('/logout', async (req, res) => {
     client.on('ready', () => {
       console.log('🤖 Nuevo cliente listo tras logout');
       currentQR = null;
+      if (currentConnectionId) {
+        connections[currentConnectionId].state = 'CONNECTED';
+        connections[currentConnectionId].number = client.info?.wid?.user || '-';
+      }
     });
     client.on('message', async (msg) => {
       const remitente = msg.from;
       const mensaje = msg.body;
       const fecha = new Date().toISOString();
-
       db.run(`
         INSERT INTO mensajes (remitente, mensaje, fecha, fromMe)
         VALUES (?, ?, ?, ?)
@@ -214,7 +234,6 @@ router.get('/logout', async (req, res) => {
           console.log(`💾 Mensaje de usuario guardado: "${mensaje}" de ${remitente}`);
         }
       });
-
       await learningHandler.processMessage(msg);
     });
     client.on('message_create', async (msg) => {
@@ -222,7 +241,6 @@ router.get('/logout', async (req, res) => {
         const remitente = msg.to;
         const mensaje = msg.body;
         const fecha = new Date().toISOString();
-
         db.run(`
           INSERT INTO mensajes (remitente, mensaje, fecha, fromMe)
           VALUES (?, ?, ?, ?)
@@ -236,14 +254,12 @@ router.get('/logout', async (req, res) => {
       }
     });
 
-    // 6) Inicializar el nuevo cliente
     await client.initialize();
     console.log("✅ Nuevo cliente inicializado tras logout.");
 
-    // 7) Responder al usuario
     res.send(`
       <h1>✅ Sesión cerrada y cliente reiniciado</h1>
-      <p>Puedes <a href="/generate-qr">generar un nuevo QR</a> para reconectar.</p>
+      <p>Puedes <a href="/generate-qr?connection=${currentConnectionId}">generar un nuevo QR</a> para reconectar.</p>
       <p><a href="/">Volver al panel</a></p>
     `);
   } catch (error) {
