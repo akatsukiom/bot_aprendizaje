@@ -10,7 +10,7 @@ const learningHandler = require('../src/handlers/learningHandler');
 router.get('/', (req, res) => {
   // Enviar el archivo dashboard.html que está en la carpeta 'public'
   // Ajusta la ruta si tu dashboard.html está en otra ubicación
-  res.sendFile(path.join(__dirname, '..', 'public', 'dashboard.html'));
+  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
 // 2) Obtener mensajes
