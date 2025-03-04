@@ -5,7 +5,7 @@ const fs = require('fs');
 const qrcode = require('qrcode-terminal');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 
-// Importar DB y learningHandler si los usas
+// Si usas DB y learningHandler, ajústalo aquí:
 const db = require('../db');
 const learningHandler = require('../src/handlers/learningHandler');
 
@@ -48,12 +48,17 @@ client.on('message', async (msg) => {
   const fecha = new Date().toISOString();
 
   // Guardar en DB (ejemplo con fromMe=0)
-  // Si no tienes DB, puedes omitir
   if (db) {
     db.run(`
       INSERT INTO mensajes (remitente, mensaje, fecha, fromMe)
       VALUES (?, ?, ?, 0)
-    `, [remitente, mensaje, fecha]);
+    `, [remitente, mensaje, fecha], (err) => {
+      if (err) {
+        console.error('❌ Error al guardar mensaje de usuario:', err.message);
+      } else {
+        console.log(`💾 Mensaje de usuario guardado: "${mensaje}" de ${remitente}`);
+      }
+    });
   }
 
   // Lógica de aprendizaje (opcional)
@@ -73,7 +78,13 @@ client.on('message_create', async (msg) => {
       db.run(`
         INSERT INTO mensajes (remitente, mensaje, fecha, fromMe)
         VALUES (?, ?, ?, 1)
-      `, [remitente, mensaje, fecha]);
+      `, [remitente, mensaje, fecha], (err) => {
+        if (err) {
+          console.error('❌ Error al guardar mensaje del bot:', err.message);
+        } else {
+          console.log(`💾 Mensaje del bot guardado: "${mensaje}" para ${remitente}`);
+        }
+      });
     }
   }
 });
@@ -94,11 +105,11 @@ client.initialize().then(() => {
 // 1) Endpoint /qr-status para que el frontend sepa si está conectado o no
 router.get('/qr-status', async (req, res) => {
   try {
-    const state = await client.getState(); // Puede ser CONNECTED, DISCONNECTED, etc.
+    const state = await client.getState(); // CONNECTED, DISCONNECTED, etc.
     if (state === 'CONNECTED') {
       return res.json({ state: 'CONNECTED', qr: null });
     }
-    // Si no está conectado, devolvemos el QR
+    // Si no está conectado, devolvemos el QR (si existe)
     if (!client.pupPage) {
       // Si la página de Puppeteer no existe, asumimos desconectado
       return res.json({ state: 'DISCONNECTED', qr: null });
@@ -111,7 +122,7 @@ router.get('/qr-status', async (req, res) => {
   }
 });
 
-// 2) Ruta /generate-qr que sirve el HTML con el script que hace polling
+// 2) Ruta /generate-qr que sirve la página HTML con polling
 router.get('/generate-qr', async (req, res) => {
   try {
     const state = await client.getState();
@@ -259,7 +270,7 @@ router.get('/logout', async (req, res) => {
       <p><a href="/">Volver al panel</a></p>
     `);
   } catch (err) {
-    console.error('❌ Error en el cierre de sesión:', err);
+    console.error('❌ Error al cerrar sesión:', err);
     res.status(500).send('Error al cerrar sesión. Intente nuevamente.');
   }
 });
