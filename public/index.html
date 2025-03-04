@@ -39,16 +39,16 @@
       <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
           <span class="connection-header">Conexión 1</span>
-          <span class="badge badge-danger status-badge" id="status-1">Desconectado</span>
+          <span class="badge status-badge" id="status-1">Desconectado</span>
         </div>
         <div class="card-body">
           <p><strong>Número:</strong> <span id="number-1">-</span></p>
           <div class="btn-group btn-group-sm d-flex flex-column" role="group">
-            <!-- Botón Generar QR: se muestra si estado != CONNECTED -->
+            <!-- Botón Generar QR: visible solo si está desconectado -->
             <button class="btn btn-primary mb-2" id="btn-generate-qr-1" onclick="generateQR(1)">
               Generar QR
             </button>
-            <!-- Botón Cerrar Conexión: se muestra si estado == CONNECTED -->
+            <!-- Botón Cerrar Conexión: visible solo si está conectado -->
             <button class="btn btn-danger mb-2" id="btn-close-1" onclick="closeConnection(1)" style="display:none;">
               Cerrar Conexión
             </button>
@@ -57,48 +57,7 @@
         </div>
       </div>
     </div>
-    <!-- Conexión 2 -->
-    <div class="col-md-4" id="connection-card-2">
-      <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <span class="connection-header">Conexión 2</span>
-          <span class="badge badge-danger status-badge" id="status-2">Desconectado</span>
-        </div>
-        <div class="card-body">
-          <p><strong>Número:</strong> <span id="number-2">-</span></p>
-          <div class="btn-group btn-group-sm d-flex flex-column" role="group">
-            <button class="btn btn-primary mb-2" id="btn-generate-qr-2" onclick="generateQR(2)">
-              Generar QR
-            </button>
-            <button class="btn btn-danger mb-2" id="btn-close-2" onclick="closeConnection(2)" style="display:none;">
-              Cerrar Conexión
-            </button>
-            <button class="btn btn-info" onclick="loadMessages(2)">Ver Mensajes</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <!-- Conexión 3 -->
-    <div class="col-md-4" id="connection-card-3">
-      <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <span class="connection-header">Conexión 3</span>
-          <span class="badge badge-danger status-badge" id="status-3">Desconectado</span>
-        </div>
-        <div class="card-body">
-          <p><strong>Número:</strong> <span id="number-3">-</span></p>
-          <div class="btn-group btn-group-sm d-flex flex-column" role="group">
-            <button class="btn btn-primary mb-2" id="btn-generate-qr-3" onclick="generateQR(3)">
-              Generar QR
-            </button>
-            <button class="btn btn-danger mb-2" id="btn-close-3" onclick="closeConnection(3)" style="display:none;">
-              Cerrar Conexión
-            </button>
-            <button class="btn btn-info" onclick="loadMessages(3)">Ver Mensajes</button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- Aquí podrías agregar tarjetas para Conexión 2 y 3 si lo deseas -->
   </div>
 
   <!-- Panel de Mensajes -->
@@ -116,9 +75,8 @@
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 <script>
-  // Actualiza el estado y número en la tarjeta
+  // Función para actualizar el estado y número de la tarjeta
   function updateStatus(connectionId, status, number = '-') {
-    // Cambia el texto y color del badge
     const badgeEl = document.getElementById('status-' + connectionId);
     if (status === 'CONNECTED') {
       badgeEl.innerText = 'Conectado';
@@ -127,14 +85,10 @@
       badgeEl.innerText = 'Desconectado';
       badgeEl.className = 'badge status-badge badge-danger';
     }
-
-    // Actualiza el número
     document.getElementById('number-' + connectionId).innerText = number;
 
-    // Muestra/oculta botones
     const btnGenerate = document.getElementById('btn-generate-qr-' + connectionId);
     const btnClose = document.getElementById('btn-close-' + connectionId);
-
     if (status === 'CONNECTED') {
       btnGenerate.style.display = 'none';
       btnClose.style.display = 'block';
@@ -144,42 +98,32 @@
     }
   }
 
-  // Redirige para generar QR
+  // Redirige para generar QR (usa el endpoint /generate-qr?connection=ID)
   function generateQR(connectionId) {
-    // Ajusta la ruta según tu backend
     window.location.href = '/generate-qr?connection=' + connectionId;
   }
 
-  // Cierra la conexión (simulado o real)
+  // Simula cerrar la conexión (aquí podrías integrar un fetch a /logout)
   function closeConnection(connectionId) {
     alert('Cerrando conexión ' + connectionId);
-    // En un caso real, harías fetch('/logout?connection='+connectionId) o similar
-    // Simulamos que se desconecta:
     updateStatus(connectionId, 'DISCONNECTED', '-');
     if (document.getElementById('current-connection').innerText == connectionId) {
       document.getElementById('current-connection').innerText = '-';
-      document.getElementById('message-list').innerHTML = 
+      document.getElementById('message-list').innerHTML =
         '<p class="text-muted">Selecciona una conexión para ver sus mensajes.</p>';
     }
   }
 
-  // Carga los mensajes de una conexión (y actualiza el estado real)
+  // Carga mensajes (y consulta el estado real) para la conexión
   function loadMessages(connectionId) {
     document.getElementById('current-connection').innerText = connectionId;
-    
-    // 1) Consultar estado real de la conexión
     fetch('/connection-status?connection=' + connectionId)
-      .then(r => r.json())
+      .then(response => response.json())
       .then(data => {
-        // data.state => "CONNECTED" o "DISCONNECTED"
-        // data.number => el número o "-"
         updateStatus(connectionId, data.state, data.number);
-
-        // 2) Si está conectado, cargamos mensajes
         if (data.state === 'CONNECTED') {
-          // Llama a /messages?connection=X
           fetch('/messages?connection=' + connectionId)
-            .then(r => r.json())
+            .then(response => response.json())
             .then(msgs => {
               let html = '';
               msgs.forEach(m => {
@@ -194,20 +138,38 @@
             })
             .catch(err => {
               console.error('Error al cargar mensajes:', err);
-              document.getElementById('message-list').innerHTML = 
+              document.getElementById('message-list').innerHTML =
                 '<p class="text-danger">Error al cargar mensajes.</p>';
             });
         } else {
-          document.getElementById('message-list').innerHTML = 
+          document.getElementById('message-list').innerHTML =
             '<p class="text-muted">No conectado. Genera QR y escanéalo.</p>';
         }
       })
       .catch(err => {
         console.error('Error al consultar estado:', err);
-        document.getElementById('message-list').innerHTML = 
+        document.getElementById('message-list').innerHTML =
           '<p class="text-danger">Error al consultar estado.</p>';
       });
   }
+
+  // Función de polling para actualizar el estado de la conexión 1 automáticamente cada 5 segundos
+  function pollConnectionStatus(connectionId) {
+    fetch('/connection-status?connection=' + connectionId)
+      .then(response => response.json())
+      .then(data => {
+        updateStatus(connectionId, data.state, data.number);
+      })
+      .catch(err => console.error('Error en polling:', err));
+  }
+
+  // Inicia el polling cuando carga la página
+  window.addEventListener('load', () => {
+    // Por ejemplo, para la Conexión 1
+    setInterval(() => {
+      pollConnectionStatus(1);
+    }, 5000);
+  });
 </script>
 </body>
 </html>
